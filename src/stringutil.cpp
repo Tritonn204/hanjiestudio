@@ -20,3 +20,9 @@ std::string pathDir(const std::string& str)
   std::size_t found = str.find_last_of("/\\");
   return str.substr(0,found+1);
 }
+
+const char *combineChars(const char *a, const char *b)
+{
+  const char* result = (std::string(a) + std::string(b)).c_str();
+  return result;
+}

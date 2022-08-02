@@ -1,13 +1,30 @@
 #include "Game.hpp"
 #include "Console.hpp"
 #include "Nonogram.hpp"
+#include "Viewer.hpp"
 #include "bmfont.hpp"
 #include "SDL2/SDL_ttf.h"
 #include "GFX.hpp"
 #include "WinDPI.hpp"
+#include "nfd.hpp"
+#include <SDL2/SDL_thread.h>
 
 Nonogram *nonogram = nullptr;
 SDL_Event event;
+
+typedef struct {
+    Nonogram *n;
+} SolveData;
+
+int solvePuzzle(void* data)
+{
+  SolveData *tdata = (SolveData*)data;
+  tdata->n->solvePuzzle();
+  free(tdata);
+  return 0;
+}
+
+//sadsa
 
 Game::Game()
 {
@@ -23,6 +40,11 @@ void Game::init(const char *title, int xPos, int yPos, int width, int height, in
   if (SDL_Init(SDL_INIT_EVERYTHING) == 0 )
   {
     log("SDL subsystems initialized!");
+    if (NFD_Init() != NFD_OKAY) {
+      error("Failed to initiate NFD");
+      return;
+    }
+
     float dpi, defaultDpi;
     MySDL_GetDisplayDPI(0, &dpi, &defaultDpi);
     mWidth = width;
@@ -41,7 +63,7 @@ void Game::init(const char *title, int xPos, int yPos, int width, int height, in
       if (renderer)
       {
         SDL_SetRenderDrawColor(renderer,255,255,255,255);
-        SDL_SetHint( SDL_HINT_RENDER_SCALE_QUALITY, "1" );
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         log("Renderer created!");
 
@@ -49,10 +71,10 @@ void Game::init(const char *title, int xPos, int yPos, int width, int height, in
         font->init(renderer,"res/hints.fnt");
 
         nonogram = new Nonogram();
-        nonogram->createContext(window, renderer);
+        nonogram->createContext(window, renderer, &zoom);
         nonogram->linkMouse(&mouseX, &mouseY);
         nonogram->setFont(font);
-        nonogram->init("Random", (rand()%15)+5, (rand()%15)+5);
+        nonogram->init("Random", 4, 2);
         nonogram->fitToView();
 
         isRunning = true;
@@ -73,7 +95,6 @@ void Game::handleEvents()
         isRunning = false;
         break;
       case SDL_FINGERDOWN:
-        std::cout << event.tfinger.x << std::endl;
         break;
       case SDL_WINDOWEVENT:
         if (event.window.windowID == mWindowID) {
@@ -153,27 +174,89 @@ void Game::handleEvents()
           //Display change flag
           switch( event.key.keysym.sym ){
             case SDLK_SPACE:
+              space = true;
+              break;
+            case SDLK_RIGHT:
               nonogram->init("Random", (rand()%30)+10, (rand()%30)+10);
               nonogram->fitToView();
               break;
-            case SDLK_RIGHT:
-              break;
             case SDLK_LEFT:
+              nonogram->loadPuzzle();
               break;
             case SDLK_DOWN:
-              screenshot("screenshot.png",renderer,window);
+            {
+              //SolveData *data;
+              //data->n = nonogram;
+              //SDL_Thread* solveThread = SDL_CreateThread(solvePuzzle, "Solver", data);
+              //SDL_DetachThread(solveThread);
+              //nonogram->savePuzzleTxt();
+              nonogram->solvePuzzle();
               break;
             }
-
-            break;
+            case SDLK_UP:
+              nonogram->toggle(VIEWER_HINTS);
+              nonogram->fitToView();
+              break;
+            }
+            default:
+              break;
         }
       case SDL_KEYUP:
+        switch( event.key.keysym.sym ){
+          case SDLK_SPACE:
+            space = false;
+            panning = false;
+            break;
+          default:
+            break;
+        }
+        break;
+      case SDL_MOUSEWHEEL:
+        {
+          float scaleX, scaleY;
+          SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+
+          int W, H;
+          SDL_GetRendererOutputSize(renderer, &W, &H);
+          int ruler = std::min(W,H);
+
+          float max = ((float)ruler/nonogram->getCellSize())/(W > H ? scaleY : scaleX)/5;
+
+          zoom += (float)event.wheel.y/10.0f;
+          zoom = std::min(zoom,max);
+          zoom = std::max(zoom,(float)0.66);
+        }
         break;
       case SDL_MOUSEMOTION:
-        SDL_GetMouseState( &mouseX, &mouseY );
-        break;
+        {
+          float scaleX, scaleY;
+          SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+          SDL_GetMouseState( &mouseX, &mouseY );
+          if (panning) {
+            cam.x += event.motion.xrel/scaleX;
+            cam.y += event.motion.yrel/scaleY;
+          }
+          break;
+        }
       case SDL_MOUSEBUTTONDOWN:
+        {
+          if (space) {
+            if (event.button.button == SDL_BUTTON_LEFT) {
+              panning = true;
+            }
+          } else {
+            float scaleX, scaleY;
+            SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+            if (nonogram->contains(mouseX/scaleX, mouseY/scaleY))
+              nonogram->mouseEvent(event);
+          }
+          break;
+      }
       case SDL_MOUSEBUTTONUP:
+        nonogram->mouseEvent(event);
+        if (event.button.button == SDL_BUTTON_LEFT) {
+          panning = false;
+        }
         break;
     }
   }
@@ -183,6 +266,7 @@ void Game::update()
 {
   handleEvents();
   nonogram->fitToView();
+  nonogram->update();
 }
 
 void Game::render()
@@ -198,10 +282,14 @@ void Game::render()
   float scaleY;
   SDL_RenderGetScale(renderer, &scaleX, &scaleY);
 
+  scaleX *= zoom;
+  scaleY *= zoom;
+
   int w = nonogram->getWidth();
   int h = nonogram->getHeight();
 
-  nonogram->render(width/2/scaleX - w/2, height/2/scaleY - h/2);
+  nonogram->setPosition((width/2)*zoom/scaleX - (w/2)*zoom + cam.x, (height/2)*zoom/scaleY  - (h/2)*zoom + cam.y);
+  nonogram->render();
 
   SDL_RenderPresent(renderer);
 }
@@ -210,6 +298,7 @@ void Game::clean()
 {
   SDL_DestroyWindow(window);
   SDL_DestroyRenderer(renderer);
+  NFD_Quit();
   SDL_Quit();
   log("Game Cleaned");
 }

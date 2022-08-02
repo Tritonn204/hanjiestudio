@@ -5,6 +5,8 @@
 #include <SDL2/SDL.h>
 #include "Console.hpp"
 
+#define LERP_TO_ORIGIN 1
+
 class Game {
 public:
   Game();
@@ -30,8 +32,12 @@ public:
   bool running() { return isRunning; };
 
 private:
+  SDL_Point cam = SDL_Point{0,0};
+
   int cnt;
   bool isRunning;
+
+  float zoom = 1;
 
   int mouseX;
   int mouseY;
@@ -52,6 +58,17 @@ private:
   bool mFullScreen;
   bool mMinimized;
   bool mShown;
+
+  //Key combo flags
+  bool ctrl = false;
+  bool space = false;
+  bool shift = false;
+
+  //app controls
+  bool panning = false;
+
+  //camera movement state
+  int lerpState = 0;
 };
 
 #endif /* Game_hpp */

@@ -6,37 +6,10 @@
 #include <iostream>
 #include <vector>
 #include "bmfont.hpp"
-
-class Viewer {
-public:
-  int largestRow = 1;
-  int largestCol = 1;
-
-  int cellSize = 48;
-
-  float outlineWeight = 5;
-  float clusterWeight = 3.5f;
-  float lineWeight = 2.1;
-  float fontSize = 40;
-
-  SDL_Color borderColor = SDL_Color{80, 80, 80, 255};
-  SDL_Color lineColor = SDL_Color{120, 120, 120, 60};
-  SDL_Color clusterColor = SDL_Color{0, 70, 128, 100};
-  SDL_Color cellColor = SDL_Color{0, 0, 0, 255};
-  SDL_Color blankColor = SDL_Color{255, 255, 255, 0};
-  SDL_Color hintColor = SDL_Color{0, 0, 0, 255};
-  SDL_Color focusColor = SDL_Color{10, 60, 100, 200};
-
-  Viewer();
-  ~Viewer();
-
-  SDL_Color *cursorCell(SDL_Color c, int opacity);
-
-  void init(int cellSize);
-
-private:
-
-};
+#include "mouseobject.hpp"
+#include "Texture.hpp"
+#include "Viewer.hpp"
+#include "Solver.hpp"
 
 class Nonogram {
 public:
@@ -46,20 +19,57 @@ public:
   int height;
 
   bool isValid;
+  bool paused;
+
+  std::vector<bool> toggles = std::vector<bool>(50,false);
+
+  std::vector<std::vector<int>> columns;
+  std::vector<std::vector<int>> rows;
+
+  std::vector<std::vector<int>> cells;
 
   Nonogram();
   ~Nonogram();
 
   void init(const char* title, int sizeX, int sizeY);
 
+  void bindMouseControls();
+
   void update();
   void refresh();
-  void render(int posX, int posY);
-  void createContext(SDL_Window *w, SDL_Renderer *r) {window = w; renderer = r;}
+  void render();
+  void createContext(SDL_Window *w, SDL_Renderer *r, float *z)
+  {
+    window = w;
+    renderer = r;
+    zoom = z;
+  }
   void loadCells(int **c, int sizeX, int sizeY);
   void randomize();
   void fitToView();
   void linkMouse(int *mX, int *mY) {mouseX = mX; mouseY = mY;}
+  void setPosition(int x, int y);
+  void scaledMousePos(int *qX, int *qY);
+  void cellPos(int *qX, int *qY);
+  Texture *generateBitmap();
+  void savePuzzle();
+  void savePuzzleTxt();
+  void loadPuzzle();
+
+  int getCellSize() {return viewer->cellSize;}
+  int getLargestRow() {return viewer->largestRow;}
+  int getLargestCol() {return viewer->largestCol;}
+
+  void toggle(int type) {
+    viewer->toggle(type);
+    toggles[type] = !toggles[type];
+  }
+
+  void onClick(SDL_Event e);
+  void onRelease(SDL_Event e);
+
+  void mouseEvent(SDL_Event e) {mouseHandler->mouseEvent(e);}
+  bool contains(int x, int y);
 
   int getWidth();
   int getHeight();
@@ -68,24 +78,33 @@ public:
   void setFont(BitmapFont *f) { font = f; }
 
   std::vector<std::vector<int>> getCells() { return cells; }
+  std::vector<std::vector<int>> fromTexture(Texture *img);
+
   void clearCells();
   void validate();
+
+  void solvePuzzle();
 
   void exportPuzzle();
 
 private:
   SDL_Window *window;
   SDL_Renderer *renderer;
+  Viewer *viewer;
+  MouseObject *mouseHandler;
+  Solver *solver;
+
+  float *zoom;
 
   int *mouseX;
   int *mouseY;
 
+  int X;
+  int Y;
+
+  int currentButton;
+
   BitmapFont *font;
-
-  std::vector<std::vector<int>> columns;
-  std::vector<std::vector<int>> rows;
-
-  std::vector<std::vector<int>> cells;
 };
 
 #endif /* Nonogram_hpp */

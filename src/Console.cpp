@@ -19,12 +19,20 @@ void log(std::string s)
 
 void log(std::vector<std::vector<int>> v)
 {
-  for (int i = 0; i < v.size(); i++) {
-    for (int j = 0; j < v[i].size(); j++) {
-      std::cout << v[i][j] << ' ';
+  for (size_t i = 0; i < v[i].size(); i++) {
+    for (size_t j = 0; j < v.size(); j++) {
+      std::cout << v[j][i] << ' ';
     }
     std::cout << std::endl;
   }
+}
+
+void log(std::vector<int> v)
+{
+  for (size_t i = 0; i < v.size(); i++) {
+    std::cout << v[i] << ' ';
+  }
+  std::cout << std::endl;
 }
 
 void error(std::string s)

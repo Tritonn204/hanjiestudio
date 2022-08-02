@@ -7,7 +7,7 @@
 
 Game *game = nullptr;
 
-int init()
+void init()
 {
   srand(time(NULL));
 
@@ -16,7 +16,7 @@ int init()
   int w = GetSystemMetrics(SM_CXSCREEN);
   int h = GetSystemMetrics(SM_CYSCREEN);
 
-  game->init("Nonogrammer v1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w/2, h/2, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI );
+  game->init("Hanjie Studio v0.1", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w/2, h/2, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI );
 }
 
 int main (int argc, char *argv[])
