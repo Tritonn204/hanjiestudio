@@ -68,12 +68,57 @@ int Solver::requiredCells(const std::vector<int> nums){
   return (sum == 0) ? 0 : sum - 1; // The right-most number don't need any gap
 }
 
-bool Solver::solve(Nonogram *puzzle, float S)
+int Solver::getBound(int edge)
+{
+  int result;
+  bool found = false;
+  switch(edge) {
+    case SOLVER_BOUND_TOP:
+    {
+      for(size_t j = 0; j < (*solution)[0].size(); j++) {
+        for(size_t i = 0; i < (*solution).size(); i++) {
+          if ((*solution)[i][j] == 2) return j;
+        }
+      }
+      break;
+    }
+    case SOLVER_BOUND_RIGHT:
+    {
+      for(size_t i = (*solution).size()-1; i > 0; i--) {
+        for(size_t j = 0; j < (*solution)[0].size(); j++) {
+          if ((*solution)[i][j] == 2) return i;
+        }
+      }
+      break;
+    }
+    case SOLVER_BOUND_BOTTOM:
+    {
+      for(size_t j = (*solution)[0].size()-1; j > 0; j--) {
+        for(size_t i = 0; i < (*solution).size(); i++) {
+          if ((*solution)[i][j] == 2) return j;
+        }
+      }
+      break;
+    }
+    case SOLVER_BOUND_LEFT:
+    {
+      for(size_t i = 0; i < (*solution).size(); i++) {
+        for(size_t j = 0; j < (*solution)[0].size(); j++) {
+          if ((*solution)[i][j] == 2) return i;
+        }
+      }
+      break;
+    }
+  }
+  return 0;
+}
+
+std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
 {
   const auto processor_count = std::thread::hardware_concurrency();
   int threadCount = processor_count;
   if (threadCount == 0) threadCount = 1;
-  ctpl::thread_pool lineQueue(threadCount);
+  ctpl::thread_pool lineQueue(1);
 
   std::cout << threadCount << " threads" << std::endl;
 
@@ -127,11 +172,9 @@ bool Solver::solve(Nonogram *puzzle, float S)
             edgeResults[i] = 1;
             result = true;
             updateSolvePreview(j, rowEdges[i], gen[j]);
-
-            if (std::find(intersects.begin(), intersects.end(), j) == intersects.end()) {
-              intersects.push_back(j);
-            }
           } else {
+            auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
+            (void)scopedLock;
             edgeResults[i] = 0;
           }
           if ((*solution)[j][rowEdges[i]] == 1) {
@@ -144,14 +187,6 @@ bool Solver::solve(Nonogram *puzzle, float S)
                 (*solution)[j][rowEdges[i]+(n*dir)] = 1;
                 updateSolvePreview(j, rowEdges[i]+(n*dir), 1);
                 edgeResults[i] = 1;
-                // tRow gen2 = lineSolve(puzzle, false, puzzle->rows[n], n, puzzle->cells.size(), &lineQueue);
-                // for(size_t b = 0; b < gen2.size(); b++) {
-                //   if (gen2[b] != (*solution)[b][n] && gen2[b] < 2) {
-                //     (*solution)[b][n] = gen2[b];
-                //     rowResults[n] = 1;
-                //     updateSolvePreview(b, n, gen2[b]);
-                //   }
-                // }
               }
             }
             if (rowEdges[i]+((clue)*dir) > 0 && rowEdges[i]+((clue)*dir) < (*solution)[0].size()){
@@ -197,6 +232,8 @@ bool Solver::solve(Nonogram *puzzle, float S)
 
             result = true;
           } else {
+            auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
+            (void)scopedLock;
             edgeResults[i] = 0;
           }
           if ((*solution)[colEdges[i]][j] == 1) {
@@ -209,14 +246,6 @@ bool Solver::solve(Nonogram *puzzle, float S)
                 (*solution)[colEdges[i]+(n*dir)][j] = 1;
                 updateSolvePreview(colEdges[i]+(n*dir), j, 1);
                 edgeResults[i] = 1;
-                // tRow gen2 = lineSolve(puzzle, true, puzzle->columns[n], n, puzzle->cells[0].size(), &lineQueue);
-                // for(size_t b = 0; b < gen2.size(); b++) {
-                //   if (gen2[b] != (*solution)[n][b] && gen2[b] < 2) {
-                //     (*solution)[n][b] = gen2[b];
-                //     columnResults[n] = 1;
-                //     updateSolvePreview(n, b, gen2[b]);
-                //   }
-                // }
               }
             }
             if (colEdges[i]+((clue)*dir) > 0 && colEdges[i]+((clue)*dir) < (*solution).size()){
@@ -294,14 +323,14 @@ bool Solver::solve(Nonogram *puzzle, float S)
     isDone = false;
     while (!isDone) {
       SDL_PumpEvents();
-      if (doneCols % 5 == 0 || doneCols == puzzle->cells.size()) {
-        for(size_t j = 0; j < intersects.size(); j++) {
-          lineQueue.push([&,j](int) {
-            lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
-          });
-        }
-        intersects.clear();
-      }
+      // if (doneCols % 5 == 0 || doneCols == puzzle->cells.size()) {
+      //   for(size_t j = 0; j < intersects.size(); j++) {
+      //     lineQueue.push([&,j](int) {
+      //       lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
+      //     });
+      //   }
+      //   intersects.clear();
+      // }
       if (
         std::find(columnResults.begin(), columnResults.end(),2) == columnResults.end()
       ) {
@@ -331,11 +360,11 @@ bool Solver::solve(Nonogram *puzzle, float S)
   for(size_t i = 0; i < puzzle->cells.size(); i++) {
     for(size_t j = 0; j < puzzle->cells[0].size(); j++) {
       if ((*solution)[i][j] == 2)
-      return false;
+      return *solution;
     }
   }
   progress->~Texture();
-  return true;
+  return std::vector<std::vector<int>>();
 }
 
 void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *colResults, int i, tRow *intersects, ctpl::thread_pool *lineQueue)
@@ -393,7 +422,11 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
         // }
       }
     }
-    if ((*rowResults)[i] == 2) (*rowResults)[i] = 0;
+    if ((*rowResults)[i] == 2){
+      auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
+      (void)scopedLock;
+      (*rowResults)[i] = 0;
+    }
   }
 }
 
@@ -456,10 +489,12 @@ std::vector<tRow> Solver::calcSafeRuns(tRow row)
       if (freeSpace > 0) {
       } else
       if (row[i] == 1 || fills.size() == 0) {
-        fills.push_back(run);
-        run = 0;
+        if (canCalc) {
+          fills.push_back(run);
+          run = 0;
+        }
       }
-      if (fills.size() > 0) {
+      if (fills.size() > 0 && canCalc) {
         result.push_back(fills);
         fills.clear();
       }
@@ -504,8 +539,10 @@ tRow Solver::calcSafeClues(tRow row)
         fills.push_back(freeSpace*1000);
       } else
       if (row[i] == 1 || fills.size() == 0) {
-        fills.push_back(run);
-        run = 0;
+        if (canCalc) {
+          fills.push_back(run);
+          run = 0;
+        }
       }
     }
   }
@@ -570,8 +607,8 @@ bool Solver::clueScan(Nonogram *puzzle)
         }
       }
     }
-    if (resolved)
-    std::cout << "row " << j << " resolved" << std::endl;
+    //if (resolved)
+    //std::cout << "row " << j << " resolved" << std::endl;
   }
   for(size_t j = 0; j < (*solution).size(); j++) {
     int run = 0;
@@ -584,12 +621,11 @@ bool Solver::clueScan(Nonogram *puzzle)
           resolved = true;
           (*solution)[j][i] = 0;
           updateSolvePreview(j,i,0);
-
         }
       }
     }
-    if (resolved)
-    std::cout << "column " << j << " resolved" << std::endl;
+    //if (resolved)
+    //std::cout << "column " << j << " resolved" << std::endl;
   }
   return resolved;
 }
@@ -641,104 +677,109 @@ bool Solver::checkConflictCross(Nonogram *puzzle, bool isColumn, int rowIndex, i
 {
   int totalLength = isColumn ? (*solution).size() : (*solution)[0].size();
   tRow comparison = (isColumn ? puzzle->rows[index] : puzzle->columns[index]);
+  bool unsolved = false;
   tRow tempRow(totalLength, 3);
   if (!isColumn) {
     for(int i = 0; i < totalLength; i++) {
+      if ((*solution)[index][i] == 2) unsolved = true;
       tempRow[i] = (*solution)[index][i];
     }
     tempRow[rowIndex] = val;
     tRow newClues = calcSafeClues(tempRow);
-    int firstClue;
-    for(size_t i = 0; i < newClues.size(); i++) {
-      if (newClues[i] < 1000) {
-        firstClue = newClues[i];
-        break;
+    tRow confirmedClues;
+    for (int n : newClues) {
+      if (n < 1000) {
+        confirmedClues.push_back(n);
       }
     }
-    auto clueIndex = std::find(comparison.begin(), comparison.end(), firstClue);
-    tRow occurences;
-    std::vector<int>::iterator it = comparison.begin();
-    while ((it = std::find_if(it, comparison.end(), [newClues, firstClue](int x){return x == firstClue; })) != comparison.end())
-    {
-        occurences.push_back(std::distance(comparison.begin(), it));
-        it++;
-    }
-    if(clueIndex == comparison.end() && newClues[0]/1000 >= comparison[0]+1) {
-      return false;
-    } else {
-      bool flagged = true;
-      for(size_t j = 0; j < occurences.size(); j++) {
-        int i = 0;
-        while(i < newClues.size()) {
-          if (occurences[j] + i >= comparison.size()) {
-            if (flagged) flagged = false;
-            break;
-          }
-          if (comparison[(*clueIndex)+i] != newClues[occurences[j]+i] && comparison[(*clueIndex)+i] + 1 > newClues[occurences[j]+i]/1000) {
-            break;
-          }
-          if(comparison[(*clueIndex)+i] + 1 <= newClues[occurences[j]+i]/1000) {
-            if (flagged) flagged = false;
-            break;
-          }
-          ++i;
-        }
-      }
-      return flagged;
+    if (!unsolved && confirmedClues.size() < comparison.size()) return true;
+    else if (confirmedClues.size() > comparison.size()) return true;
+    for(int n : confirmedClues) {
+      if (std::find(comparison.begin(), comparison.end(), n) == comparison.end()) return true;
     }
   } else {
     for(int i = 0; i < totalLength; i++) {
+      if ((*solution)[i][index] == 2) unsolved = true;
       tempRow[i] = (*solution)[i][index];
     }
     tempRow[rowIndex] = val;
     tRow newClues = calcSafeClues(tempRow);
-    int firstClue;
-    for(size_t i = 0; i < newClues.size(); i++) {
-      if (newClues[i] < 1000) {
-        firstClue = newClues[i];
-        break;
+    tRow confirmedClues;
+    for (int n : newClues) {
+      if (n < 1000) {
+        confirmedClues.push_back(n);
       }
     }
-    auto clueIndex = std::find(comparison.begin(), comparison.end(), firstClue);
-    tRow occurences;
-    std::vector<int>::iterator it = comparison.begin();
-    while ((it = std::find_if(it, comparison.end(), [newClues, firstClue](int x){return x == firstClue; })) != comparison.end())
-    {
-        occurences.push_back(std::distance(comparison.begin(), it));
-        it++;
-    }
-    if(clueIndex == comparison.end() && newClues[0]/1000 >= comparison[0]+1) {
-      return false;
-    } else {
-      bool flagged = true;
-      for(size_t j = 0; j < occurences.size(); j++) {
-        int i = 0;
-        while(i < newClues.size()) {
-          if (occurences[j] + i >= comparison.size()) {
-            break;
-          }
-          if (comparison[(*clueIndex)+i] != newClues[occurences[j]+i] && comparison[(*clueIndex)+i] + 1 > newClues[occurences[j]+i]/1000) {
-            if (flagged) flagged = false;
-            break;
-          }
-          if(comparison[(*clueIndex)+i] + 1 <= newClues[occurences[j]+i]/1000) {
-            if (flagged) flagged = false;
-            break;
-          }
-          ++i;
-        }
-      }
-      return flagged;
+    if (!unsolved && confirmedClues.size() < comparison.size()) return true;
+    else if (confirmedClues.size() > comparison.size()) return true;
+    for(int n : confirmedClues) {
+      if (std::find(comparison.begin(), comparison.end(), n) == comparison.end()) return true;
     }
   }
+  return false;
 }
 
-bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tRow row)
+int Solver::getEdgeClueIndex(bool isColumn, int rowIndex, int dir)
+{
+  int run = 0;
+  int index = 0;
+  int totalLength = isColumn ? (*solution)[0].size() : (*solution).size();
+  if (!isColumn) {
+    if (dir > 0) for(int i = 0; i < totalLength; i++) {
+      if ((*solution)[i][rowIndex] == 2) return index;
+      else if ((*solution)[i][rowIndex] == 1) run++;
+      else if ((*solution)[i][rowIndex] == 0 && run > 0) {
+        run = 0;
+        index++;
+      }
+    } else for(int i = totalLength-1; i > 0; i--) {
+      if ((*solution)[i][rowIndex] == 2) return index;
+      else if ((*solution)[i][rowIndex] == 1) run++;
+      else if ((*solution)[i][rowIndex] == 0 && run > 0) {
+        run = 0;
+        index--;
+      }
+    }
+  } else {
+    if (dir > 0) for(int i = 0; i < totalLength; i++) {
+      if ((*solution)[rowIndex][i] == 2) return index;
+      else if ((*solution)[rowIndex][i] == 1) run++;
+      else if ((*solution)[rowIndex][i] == 0 && run > 0) {
+        run = 0;
+        index++;
+      }
+    } else for(int i = totalLength-1; i > 0; i--) {
+      if ((*solution)[rowIndex][i] == 2) return index;
+      else if ((*solution)[rowIndex][i] == 1) run++;
+      else if ((*solution)[rowIndex][i] == 0 && run > 0) {
+        run = 0;
+        index--;
+      }
+    }
+  }
+  return index;
+}
+
+
+
+bool Solver::checkConflictMulti(Nonogram *puzzle, bool isColumn, int rowIndex, tRow row, int dir)
 {
   if (std::find(row.begin(), row.end(), 3) != row.end()) return false;
 
-  int dir = (rowIndex > 0 ? -1 : 1);
   tRow comparison = (isColumn ? puzzle->columns[rowIndex+dir] : puzzle->rows[rowIndex+dir]);
+
+  int sum = 0;
+  int compSum = 0;
+  for(int n : row) {
+    sum += n;
+  }
+  if (sum <= 1) return false;
+  for(int n : comparison) {
+    compSum += n;
+  }
+
+  if (compSum > sum) return false;
+
   tRow tempRow(row.size(),3);
 
   if (!isColumn) {
@@ -747,15 +788,23 @@ bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tR
     }
     for(size_t i = 0; i < row.size(); i++) {
       tRow crossRow = puzzle->columns[i];
-      int clueComp = (dir > 0 ? crossRow.front() : crossRow.back());
+      int clueComp = crossRow[(dir > 0 ? 0 : crossRow.size()-1) + getEdgeClueIndex(true, i, dir)];
       if (row[i] == 1) {
-        if (clueComp > 1) {
+        int tally = 1;
+        for (int n = 1; n < clueComp; n++) {
+          if (rowIndex+(n*(-dir)) < 0 || rowIndex+(n*(-dir)) >= puzzle->rows.size()) break;
+          if ((*solution)[i][rowIndex+(n*(-dir))] != 1) break;
+          tally++;
+        }
+        if (clueComp > tally) {
           if (tempRow[i] == 0) return true;
           tempRow[i] = 1;
         }
         else if (tempRow[i] == 1) return true;
         else {
-          tempRow[i] = 0;
+          if (clueComp == tally)
+            tempRow[i] = 0;
+          else return true;
         }
       }
     }
@@ -774,17 +823,175 @@ bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tR
         if (n >= 1000 && largestSpace*1000 < n) largestSpace = n/1000;
       }
     }
+    int trueFillCount = 0;
+    int tempFillCount = 0;
     for(int n : comparison) {
       if (largestClue < n) largestClue = n;
+      trueFillCount += n;
     }
+
+    for(int n : runs) {
+      if(n > largestClue) return true;
+      tempFillCount += n;
+    }
+
     for(tRow run : runVector) {
-      log(run);
       if (!IsSubset(comparison,run))
         return true;
-      for(int n : run) {
-        if(n > largestClue) return true;
+    }
+
+    if (tempFillCount > trueFillCount) return true;
+
+    bool spaceFree = true;
+    for(int n : confirmedClues) {
+      if (std::find(comparison.begin(), comparison.end(), n) == comparison.end()) {
+        return true;
       }
     }
+    if(confirmedClues.size() > comparison.size()) return true;
+  }
+  else {
+    for(size_t i = 0; i < row.size(); i++) {
+      tempRow[i] = (*solution)[rowIndex+dir][i];
+    }
+    for(size_t i = 0; i < row.size(); i++) {
+      tRow crossRow = puzzle->rows[i];
+      int clueComp = crossRow[(dir > 0 ? 0 : crossRow.size()-1) + getEdgeClueIndex(false, i, dir)];
+      if (row[i] == 1) {
+        int tally = 1;
+        for (int n = 1; n < clueComp; n++) {
+          if (rowIndex+(n*(-dir)) < 0 || rowIndex+(n*(-dir)) >= puzzle->columns.size()) break;
+          if ((*solution)[rowIndex+(n*(-dir))][i] != 1) break;
+          tally++;
+        }
+        if (clueComp > tally) {
+          if (tempRow[i] == 0) return true;
+          tempRow[i] = 1;
+        }
+        else if (tempRow[i] == 1) return true;
+        else {
+          if (clueComp == tally)
+            tempRow[i] = 0;
+          else return true;
+        }
+      }
+    }
+    tRow newClues = calcSafeClues(tempRow);
+    tRow runs = calcClues(tempRow);
+    std::vector<tRow> runVector = calcSafeRuns(tempRow);
+    tRow confirmedClues;
+    tRow unsolvedClues = comparison;
+    int largestSpace = 0;
+    int largestClue = 0;
+    for(int n : newClues) {
+      if (n < 1000) {
+        confirmedClues.push_back(n);
+      } else {
+        if (n >= 1000 && largestSpace*1000 < n) largestSpace = n/1000;
+      }
+    }
+    int trueFillCount = 0;
+    int tempFillCount = 0;
+    for(int n : comparison) {
+      if (largestClue < n) largestClue = n;
+      trueFillCount += n;
+    }
+
+    for(int n : runs) {
+      if(n > largestClue) return true;
+      tempFillCount += n;
+    }
+
+    for(tRow run : runVector) {
+      if (!IsSubset(comparison,run))
+        return true;
+    }
+
+    if (tempFillCount > trueFillCount) return true;
+    bool spaceFree = true;
+    for(int n : confirmedClues) {
+      if (std::find(comparison.begin(), comparison.end(), n) == comparison.end()) {
+        return true;
+      }
+    }
+    if(confirmedClues.size() > comparison.size()) return true;
+  }
+  return false;
+}
+
+bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tRow row)
+{
+  if (std::find(row.begin(), row.end(), 3) != row.end()) return false;
+
+  int dir = (rowIndex > 0 ? -1 : 1);
+  tRow comparison = (isColumn ? puzzle->columns[rowIndex+dir] : puzzle->rows[rowIndex+dir]);
+
+  int sum = 0;
+  int compSum = 0;
+  for(int n : row) {
+    sum += n;
+  }
+  if (sum <= 1) return false;
+  for(int n : comparison) {
+    compSum += n;
+  }
+
+  if (compSum > sum) return false;
+
+  tRow tempRow(row.size(),3);
+  if (!isColumn) {
+    for(size_t i = 0; i < row.size(); i++) {
+      tempRow[i] = (*solution)[i][rowIndex+dir];
+    }
+    for(size_t i = 0; i < row.size(); i++) {
+      tRow crossRow = puzzle->columns[i];
+      int clueComp = (dir > 0 ? crossRow.front() : crossRow.back());
+      if (row[i] == 1) {
+        if (clueComp > 1) {
+          if (tempRow[i] == 0) return true;
+          tempRow[i] = 1;
+        }
+        else if (tempRow[i] == 1) return true;
+        else {
+          if (clueComp == 1)
+            tempRow[i] = 0;
+          else return true;
+        }
+      }
+    }
+    tRow newClues = calcSafeClues(tempRow);
+    tRow runs = calcClues(tempRow);
+    std::vector<tRow> runVector = calcSafeRuns(tempRow);
+    tRow confirmedClues;
+    tRow unsolvedClues = comparison;
+    int largestSpace = 0;
+    int largestClue = 0;
+    for(int n : newClues) {
+      if (n < 1000) {
+        confirmedClues.push_back(n);
+        unsolvedClues.erase(std::remove(unsolvedClues.begin(), unsolvedClues.end(), n), unsolvedClues.end());
+      } else {
+        if (n >= 1000 && largestSpace*1000 < n) largestSpace = n/1000;
+      }
+    }
+    int trueFillCount = 0;
+    int tempFillCount = 0;
+    for(int n : comparison) {
+      if (largestClue < n) largestClue = n;
+      trueFillCount += n;
+    }
+
+    for(int n : runs) {
+      if(n > largestClue) return true;
+      tempFillCount += n;
+    }
+
+    for(tRow run : runVector) {
+      if (!IsSubset(comparison,run))
+        return true;
+    }
+
+    if (tempFillCount > trueFillCount) return true;
 
     bool spaceFree = true;
     for(int n : confirmedClues) {
@@ -807,8 +1014,11 @@ bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tR
           tempRow[i] = 1;
         }
         else if (tempRow[i] == 1) return true;
-        else
-        tempRow[i] = 0;
+        else {
+          if (clueComp == 1)
+            tempRow[i] = 0;
+          else return true;
+        }
       }
     }
     tRow newClues = calcSafeClues(tempRow);
@@ -818,7 +1028,6 @@ bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tR
     tRow unsolvedClues = comparison;
     int largestSpace = 0;
     int largestClue = 0;
-
     for(int n : newClues) {
       if (n < 1000) {
         confirmedClues.push_back(n);
@@ -827,26 +1036,24 @@ bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tR
         if (n >= 1000 && largestSpace*1000 < n) largestSpace = n/1000;
       }
     }
-    //
-    // log("true clues");
-    // log(comparison);
-    // log("raw runs");
-    // log(runs);
-    // log("confirmed runs");
-    // log(confirmedClues);
-    // log("sample");
-    // log(tempRow);
-
+    int trueFillCount = 0;
+    int tempFillCount = 0;
     for(int n : comparison) {
       if (largestClue < n) largestClue = n;
+      trueFillCount += n;
     }
+
+    for(int n : runs) {
+      if(n > largestClue) return true;
+      tempFillCount += n;
+    }
+
     for(tRow run : runVector) {
       if (!IsSubset(comparison,run))
         return true;
-      for(int n : run) {
-        if(n > largestClue) return true;
-      }
     }
+
+    if (tempFillCount > trueFillCount) return true;
     bool spaceFree = true;
     for(int n : confirmedClues) {
       if (std::find(comparison.begin(), comparison.end(), n) == comparison.end()) {
@@ -867,12 +1074,51 @@ bool Solver::appendRow(
   if (pendingNums.size() <= 0){
     while (init.size() < (isColumn ? (*solution)[0].size() : (*solution).size()))
       init.push_back(0);
+    if(rowIndex > 0 && rowIndex < (!isColumn ? (*solution)[0].size()-1 : (*solution).size()-1)) {
+      if (!isColumn) {
+        if (
+          rowIndex == getBound(SOLVER_BOUND_TOP) &&
+          checkConflictMulti(puzzle, false, rowIndex, init, 1)
+        ) {
+          log(rowIndex);
+          log("invalid edge row looking downward");
+          return false;
+        }
+        else if (
+          rowIndex == getBound(SOLVER_BOUND_BOTTOM) &&
+          checkConflictMulti(puzzle, false, rowIndex, init, -1)
+        ) {
+          log(rowIndex);
+          log("invalid edge row looking upward");
+          return false;
+        }
+      }
+      else {
+        if (
+          rowIndex == getBound(SOLVER_BOUND_LEFT) &&
+          checkConflictMulti(puzzle, isColumn, rowIndex, init, 1)
+        ) {
+          log(rowIndex);
+          log("invalid edge col looking right");
+          return false;
+        }
+        else if (
+          rowIndex == getBound(SOLVER_BOUND_RIGHT) &&
+          checkConflictMulti(puzzle, isColumn, rowIndex, init, -1)
+        ) {
+          log(rowIndex);
+          log("invalid edge col looking left");
+          return false;
+        }
+      }
+    }
+
     for(int i = 0; i < totalLength; i++) {
       if (checkConflict(isColumn, rowIndex, i, init[i])){
         return false;
       }
-      // if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]));
-      //   return false;
+      if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]))
+        return false;
       if (init[i] != lastCombo[i] && lastCombo[i] != 3) lastCombo[i] = 2;
       else {
         lastCombo[i] = init[i];
@@ -935,10 +1181,11 @@ bool Solver::appendRowEdge(Nonogram *puzzle, bool isColumn, tRow init, const std
   if (pendingNums.size() <= 0){
     while (init.size() < (isColumn ? (*solution)[0].size() : (*solution).size()))
       init.push_back(0);
-    if (checkConflictEdge(puzzle, isColumn, rowIndex, init));
+    if (checkConflictEdge(puzzle, isColumn, rowIndex, init)) {
       return false;
+    }
     for(int i = 0; i < totalLength; i++) {
-      if (checkConflict(isColumn, rowIndex, i, init[i])){
+      if (checkConflict(isColumn, rowIndex, i, init[i])) {
         return false;
       }
       // if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]));
@@ -948,7 +1195,7 @@ bool Solver::appendRowEdge(Nonogram *puzzle, bool isColumn, tRow init, const std
         lastCombo[i] = init[i];
       }
     }
-    log(init);
+    // log(init);
     return false;
   }
   if (pendingNums[0] == totalLength) {
@@ -971,6 +1218,7 @@ bool Solver::appendRowEdge(Nonogram *puzzle, bool isColumn, tRow init, const std
     prefix = init;
     bool conflict = false;
     int index = prefix.size();
+    if (index >= totalLength) break;
     for (int i = 0; i < gapSize; ++i){
       conflict = !conflict ? checkConflict(isColumn, rowIndex, index, 0) : conflict;
       if (!conflict) {

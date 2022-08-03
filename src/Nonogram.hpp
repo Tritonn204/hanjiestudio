@@ -51,8 +51,12 @@ public:
   void setPosition(int x, int y);
   void scaledMousePos(int *qX, int *qY);
   void cellPos(int *qX, int *qY);
+
+
   Texture *generateBitmap();
+  Texture *generateBitmap(std::vector<std::vector<int>> *progress);
   void savePuzzle();
+  void saveProgress(std::vector<std::vector<int>> *progress);
   void savePuzzleTxt();
   void loadPuzzle();
 

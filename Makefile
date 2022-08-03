@@ -17,10 +17,10 @@ bin/hanjiestudio.exe: $(cppobjects) $(cobjects)
 	$(CXX) -m64 $^ $(LDLIBS) -o $@
 
 obj/%.o: src/%.cpp
-	$(CXX) -m64 -c $(OUTPUT_OPTION) $<
+	$(CXX) -m64 -c -O3 $(OUTPUT_OPTION) $<
 
 cobj/%.o: src/%.c
-	$(CC) -m64 -c $(OUTPUT_OPTION) $<
+	$(CC) -m64 -c -O3 $(OUTPUT_OPTION) $<
 
 clean:
 	-del $(subst /,\,$(cppobjects) $(cobjects) $(deps)) bin\hanjiestudio.exe

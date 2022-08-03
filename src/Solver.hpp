@@ -1,6 +1,11 @@
 #ifndef Solver_hpp
 #define Solver_hpp
 
+#define SOLVER_BOUND_TOP 0
+#define SOLVER_BOUND_RIGHT 1
+#define SOLVER_BOUND_BOTTOM 2
+#define SOLVER_BOUND_LEFT 3
+
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <vector>
@@ -31,7 +36,7 @@ public:
 
   int requiredCells(const std::vector<int> nums);
 
-  bool solve(Nonogram *puzzle, float scale);
+  std::vector<std::vector<int>> solve(Nonogram *puzzle, float scale);
   bool solveRow(Nonogram *puzzle, std::vector<tRow> *valid, int row, int size);
   bool solveColumn(Nonogram *puzzle, std::vector<tRow> *valid, int column, int size);
   void trimValidity( std::vector<std::vector<int>> *cells, std::vector<std::vector<tRow>> *validRows, std::vector<std::vector<tRow>> *validCols);
@@ -42,11 +47,15 @@ public:
   );
   bool appendRowEdge(Nonogram *puzzle, bool isColumn, tRow init, const std::vector<int> pendingNums, unsigned int rowSize, int rowIndex, tRow &lastCombo);
 
+  int getEdgeClueIndex(bool isColumn, int rowIndex, int dir);
+  int getBound(int edge);
+
   bool clueScan(Nonogram *puzzle);
   Texture *generateBitmap(std::vector<std::vector<int>> *cells);
 
   bool checkConflict(bool isColumn, int rowIndex, int index, int value);
   bool checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tRow row);
+  bool checkConflictMulti(Nonogram *puzzle, bool isColumn, int rowIndex, tRow row, int dir);
   bool checkConflictCross(Nonogram *puzzle, bool isColumn, int rowIndex, int index, int value);
 
   void render();
@@ -74,6 +83,9 @@ private:
 
   int rowComboIndex;
   int colComboIndex;
+
+  std::vector<int> solvedRows;
+  std::vector<int> solvedCols;
 
   std::mutex solutionMutex;
   std::mutex renderMutex;

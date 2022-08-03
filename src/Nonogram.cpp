@@ -98,6 +98,28 @@ void Nonogram::savePuzzle()
   }
 }
 
+void Nonogram::saveProgress(std::vector<std::vector<int>> *progress)
+{
+  Texture *t = generateBitmap(progress);
+  const char* filename = (std::string(name) + ".hbm").c_str();
+  nfdchar_t* savePath;
+  // prepare filters for the dialog
+  nfdfilteritem_t filterItem[2] = {{"Hanjie Bitmap", "hbm, bmp"}};
+
+  // show the dialog
+  nfdresult_t result = NFD_SaveDialog(&savePath, filterItem, 1, NULL, filename);
+  if (result == NFD_OKAY) {
+      puts("Success!");
+      puts(savePath);
+      t->saveToBMP(savePath);
+      NFD_FreePath(savePath);
+  } else if (result == NFD_CANCEL) {
+      puts("User pressed cancel.");
+  } else {
+      printf("Error: %s\n", NFD_GetError());
+  }
+}
+
 void Nonogram::savePuzzleTxt()
 {
   const char* filename = (std::string(name) + ".txt").c_str();
@@ -171,6 +193,40 @@ void Nonogram::loadPuzzle()
   } else {
       printf("Error: %s\n", NFD_GetError());
   }
+}
+
+Texture *Nonogram::generateBitmap(std::vector<std::vector<int>> *progress)
+{
+  float scaleX, scaleY;
+  SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+
+  Texture *t = new Texture();
+  t->createContext(renderer);
+  t->createBlank((*progress).size(), (*progress)[0].size(), SDL_TEXTUREACCESS_TARGET);
+
+  t->setAsRenderTarget();
+  SDL_RenderClear(renderer);
+  SDL_RenderSetScale(renderer,1,1);
+
+  int rgbVals[2] = {255, 0};
+
+  for (size_t i = 0; i < (*progress).size(); i++) {
+    for(size_t j = 0; j < (*progress)[i].size(); j++) {
+      SDL_SetRenderDrawColor(
+        renderer,
+        rgbVals[(*progress)[i][j]],
+        rgbVals[(*progress)[i][j]],
+        rgbVals[(*progress)[i][j]],
+        255
+      );
+      SDL_RenderDrawPoint(renderer, i, j);
+    }
+  }
+  SDL_Point p = SDL_Point{0,0};
+  SDL_SetRenderTarget(renderer,NULL);
+  SDL_RenderSetScale(renderer, scaleX,scaleY);
+  t->render(0, 0, NULL, 0.0);
+  return t;
 }
 
 Texture *Nonogram::generateBitmap()
@@ -396,11 +452,13 @@ void Nonogram::solvePuzzle()
   solver = new Solver();
   solver->init(renderer);
   paused = true;
-  bool valid = solver->solve(this,viewer->cellSize);
-  if(valid)
+  std::vector<std::vector<int>> valid = solver->solve(this,viewer->cellSize);
+  if(valid.empty())
     log("Puzzle is solvable!");
-  else
+  else {
     log("Puzzle is impossible to solve with logic alone... try altering.");
+    //saveProgress(&valid);
+  }
   SDL_Delay(3000);
   paused = false;
 }
