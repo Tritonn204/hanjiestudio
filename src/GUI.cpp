@@ -89,7 +89,7 @@ KW_Widget *GUI::addEditbox(
   KW_Rect labelrect = KW_Rect{ .y = (*dpiScale)*y, .w = (*dpiScale)*lW, .h = (*dpiScale)*lH };
   KW_Rect editboxrect = KW_Rect{ .y = (*dpiScale)*y, .w = (*dpiScale)*w, .h = (*dpiScale)*h };
   KW_Rect *rects[] = { &labelrect, &editboxrect };
-  KW_RectFillParentHorizontally(&framerect, rects, weights, 2*(*dpiScale), 32*(*dpiScale), KW_RECT_ALIGN_MIDDLE);
+  KW_RectFillParentHorizontally(&framerect, rects, weights, 2, 32, KW_RECT_ALIGN_MIDDLE);
   KW_CreateLabel(gui, frame, label, &labelrect);
   KW_Widget *editBox = KW_CreateEditbox(gui, frame, def, &editboxrect);
   return editBox;

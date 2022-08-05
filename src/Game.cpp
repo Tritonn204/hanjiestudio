@@ -317,8 +317,6 @@ void Game::render()
   int w = nonogram->getWidth();
   int h = nonogram->getHeight();
 
-  log(cam.x);
-
   nonogram->setPosition(
     (width/2)*zoom/scaleX - (w/2)*zoom + cam.x,
     (height/2)*zoom/scaleY  - (h/2)*zoom + cam.y
