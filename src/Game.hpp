@@ -5,6 +5,8 @@
 #include <SDL2/SDL.h>
 #include "Console.hpp"
 
+#include "GUI.hpp"
+
 #define LERP_TO_ORIGIN 1
 
 class Game {
@@ -34,10 +36,14 @@ public:
 private:
   SDL_Point cam = SDL_Point{0,0};
 
+  std::vector<GUI*> widgets;
+
   int cnt;
   bool isRunning;
 
   float zoom = 1;
+
+  float dpiScale;
 
   int mouseX;
   int mouseY;

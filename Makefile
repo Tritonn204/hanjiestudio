@@ -11,7 +11,7 @@ CXX := x86_64-w64-mingw32-g++
 CPPFLAGS := -MMD -MP
 
 LDLIBS := -Iinclude -Llib -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lSDL2_image \
--lcomdlg32 -lnfd -lole32 -loleaut32 -luuid -Wno-narrowing
+-lcomdlg32 -lnfd -lole32 -loleaut32 -luuid -lhpdf -lz -lKiWi -Wno-narrowing
 
 bin/hanjiestudio.exe: $(cppobjects) $(cobjects)
 	$(CXX) -m64 $^ $(LDLIBS) -o $@

@@ -51,6 +51,7 @@ public:
   int getBound(int edge);
 
   bool clueScan(Nonogram *puzzle);
+  bool edgeFill(Nonogram *puzzle);
   Texture *generateBitmap(std::vector<std::vector<int>> *cells);
 
   bool checkConflict(bool isColumn, int rowIndex, int index, int value);
@@ -77,6 +78,7 @@ private:
   std::vector<int> invalidColCombos;
 
   bool comboStarted = false;
+  bool multiLine = false;
   int comboProgressId = 0;
 
   int comboIterator;

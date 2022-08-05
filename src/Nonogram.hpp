@@ -35,6 +35,7 @@ public:
 
   void bindMouseControls();
 
+  void linkDpi(float *dScale) {dpiScale = dScale;}
   void update();
   void refresh();
   void render();
@@ -45,13 +46,14 @@ public:
     zoom = z;
   }
   void loadCells(int **c, int sizeX, int sizeY);
-  void randomize();
+  void randomize(int fillBias = 5, int gapBias = 9);
   void fitToView();
   void linkMouse(int *mX, int *mY) {mouseX = mX; mouseY = mY;}
   void setPosition(int x, int y);
   void scaledMousePos(int *qX, int *qY);
   void cellPos(int *qX, int *qY);
 
+  int testPrint();
 
   Texture *generateBitmap();
   Texture *generateBitmap(std::vector<std::vector<int>> *progress);
@@ -97,6 +99,7 @@ private:
   Viewer *viewer;
   MouseObject *mouseHandler;
   Solver *solver;
+  float *dpiScale;
 
   float *zoom;
 

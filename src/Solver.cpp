@@ -118,7 +118,7 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
   const auto processor_count = std::thread::hardware_concurrency();
   int threadCount = processor_count;
   if (threadCount == 0) threadCount = 1;
-  ctpl::thread_pool lineQueue(1);
+  ctpl::thread_pool lineQueue(threadCount);
 
   std::cout << threadCount << " threads" << std::endl;
 
@@ -150,11 +150,11 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
     rowResults.clear();
     columnResults.clear();
     edgeResults.clear();
-    edgeResults = tRow(2, 2);
+    edgeResults = tRow(4, 2);
     rowResults = tRow(puzzle->rows.size(), 2);
     columnResults = tRow(puzzle->columns.size(), 2);
 
-    int totalIntersects;
+    std::atomic<int> totalIntersects(0);
     tRow intersects;
 
     tRow fake(1000);
@@ -173,8 +173,6 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
             result = true;
             updateSolvePreview(j, rowEdges[i], gen[j]);
           } else {
-            auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-            (void)scopedLock;
             edgeResults[i] = 0;
           }
           if ((*solution)[j][rowEdges[i]] == 1) {
@@ -198,26 +196,15 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
                 edgeResults[i] = 1;
               }
             }
+            render();
           }
         }
+        render();
       });
     }
 
-    bool isDone = true;
-    while (!isDone) {
-      SDL_PumpEvents();
-      if (
-        std::find(edgeResults.begin(), edgeResults.end(),2) == edgeResults.end()
-      ) {
-        isDone = true;
-      }
-      SDL_Delay(5);
-    }
-
-    edgeResults.clear();
-    edgeResults = tRow(2, 2);
-
     intersects.clear();
+    totalIntersects = 0;
 
     for (int i = 0; i < 2; i++) {
       lineQueue.push([&, i](int){
@@ -227,14 +214,11 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
             auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
             (void)scopedLock;
             (*solution)[colEdges[i]][j] = gen[j];
-            edgeResults[i] = 1;
+            edgeResults[i+2] = 1;
             updateSolvePreview(colEdges[i], j, gen[j]);
-
             result = true;
           } else {
-            auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-            (void)scopedLock;
-            edgeResults[i] = 0;
+            edgeResults[i+2] = 0;
           }
           if ((*solution)[colEdges[i]][j] == 1) {
             int dir = colEdges[i] == 0 ? 1 : -1;
@@ -245,7 +229,7 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
                 (void)scopedLock;
                 (*solution)[colEdges[i]+(n*dir)][j] = 1;
                 updateSolvePreview(colEdges[i]+(n*dir), j, 1);
-                edgeResults[i] = 1;
+                edgeResults[i+2] = 1;
               }
             }
             if (colEdges[i]+((clue)*dir) > 0 && colEdges[i]+((clue)*dir) < (*solution).size()){
@@ -254,15 +238,17 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
                 (void)scopedLock;
                 (*solution)[colEdges[i]+((clue)*dir)][j] = 0;
                 updateSolvePreview(colEdges[i]+((clue)*dir), j, 0);
-                edgeResults[i] = 1;
+                edgeResults[i+2] = 1;
               }
             }
+            render();
           }
         }
+        render();
       });
     }
 
-    isDone = false;
+    bool isDone = false;
     while (!isDone) {
       SDL_PumpEvents();
       if (
@@ -292,14 +278,17 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
       SDL_PumpEvents();
       if (doneRows % 5 == 0 || doneRows == puzzle->cells[0].size()) {
         for(size_t j = 0; j < intersects.size(); j++) {
+          ++totalIntersects;
           lineQueue.push([&,j](int) {
             lineLogic(true, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
+            --totalIntersects;
           });
         }
         intersects.clear();
       }
       if (
-        std::find(rowResults.begin(), rowResults.end(),2) == rowResults.end()
+        std::find(rowResults.begin(), rowResults.end(),2) == rowResults.end() &&
+        totalIntersects == 0
       ) {
         isDone = true;
       }
@@ -323,16 +312,19 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
     isDone = false;
     while (!isDone) {
       SDL_PumpEvents();
-      // if (doneCols % 5 == 0 || doneCols == puzzle->cells.size()) {
-      //   for(size_t j = 0; j < intersects.size(); j++) {
-      //     lineQueue.push([&,j](int) {
-      //       lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
-      //     });
-      //   }
-      //   intersects.clear();
-      // }
+      if (doneCols % 5 == 0 || doneCols == puzzle->cells.size()) {
+        for(size_t j = 0; j < intersects.size(); j++) {
+          ++totalIntersects;
+          lineQueue.push([&,j](int) {
+            lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
+            --totalIntersects;
+          });
+        }
+        intersects.clear();
+      }
       if (
-        std::find(columnResults.begin(), columnResults.end(),2) == columnResults.end()
+        std::find(columnResults.begin(), columnResults.end(),2) == columnResults.end() &&
+        totalIntersects == 0
       ) {
         isDone = true;
       }
@@ -351,9 +343,18 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
       fails++;
     }
 
-    if (clueScan(puzzle))
+
+    if (!result && clueScan(puzzle))
       result = true;
 
+    if (edgeFill(puzzle)) result = true;
+
+    if (result) multiLine = false;
+
+    if (!result && !multiLine){
+       multiLine = true;
+       result = true;
+    }
     looper = result;
   }
   printPuzzle(*solution);
@@ -386,16 +387,9 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
           (void)scopedLock;
           (*intersects).push_back(j);
         }
-        // tRow gen2 = lineSolve(puzzle, true, puzzle->columns[j], j, puzzle->cells[0].size(), lineQueue);
-        // for(size_t n = 0; n < gen2.size(); n++) {
-        //   if (gen2[n] != (*solution)[j][n] && gen2[n] < 2) {
-        //     (*solution)[j][n] = gen2[n];
-        //     (*colResults)[j] = 1;
-        //     updateSolvePreview(j, n, gen2[n]);
-        //   }
-        // }
       }
     }
+    render();
     if ((*rowResults)[i] == 2) (*rowResults)[i] = 0;
   } else {
     // std::cout << "column " << (i+1) << std::endl;
@@ -412,14 +406,6 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
           (void)scopedLock;
           (*intersects).push_back(j);
         }
-        // tRow gen2 = lineSolve(puzzle, false, puzzle->rows[j], j, puzzle->cells.size(), lineQueue);
-        // for(size_t n = 0; n < gen2.size(); n++) {
-        //   if (gen2[n] != (*solution)[n][j] && gen2[n] < 2) {
-        //     (*solution)[n][j] = gen2[n];
-        //     (*rowResults)[j] = 1;
-        //     updateSolvePreview(n, j, gen2[n]);
-        //   }
-        // }
       }
     }
     if ((*rowResults)[i] == 2){
@@ -427,6 +413,7 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
       (void)scopedLock;
       (*rowResults)[i] = 0;
     }
+    render();
   }
 }
 
@@ -562,7 +549,6 @@ tRow Solver::getClues(bool isColumn, int rowIndex)
       else if ((*solution)[i][rowIndex] != 1 && run > 0) {
         fills.push_back(run);
         run = 0;
-        continue;
       }
       if (i == (*solution).size()-1) {
         if ((*solution)[i][rowIndex] == 1 || fills.size() == 0) {
@@ -577,7 +563,6 @@ tRow Solver::getClues(bool isColumn, int rowIndex)
       else if ((*solution)[rowIndex][i] != 1 && run > 0) {
         fills.push_back(run);
         run = 0;
-        continue;
       }
       if (i == (*solution)[0].size()-1) {
         if ((*solution)[rowIndex][i] == 1 || fills.size() == 0) {
@@ -596,6 +581,7 @@ bool Solver::clueScan(Nonogram *puzzle)
   for(size_t j = 0; j < (*solution)[0].size(); j++) {
     int run = 0;
     tRow fills = getClues(false, j);
+
     if (fills == puzzle->rows[j]) {
       for(size_t i = 0; i < (*solution).size(); i++) {
         if ((*solution)[i][j] == 2) {
@@ -655,7 +641,6 @@ void Solver::updateSolvePreview(int x, int y, int val)
   progress->scale(scale);
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, oldHint);
   SDL_SetRenderTarget(renderer, NULL);
-  render();
 }
 
 tRow getFirst(std::vector<tRow> t)
@@ -717,6 +702,137 @@ bool Solver::checkConflictCross(Nonogram *puzzle, bool isColumn, int rowIndex, i
     }
   }
   return false;
+}
+
+bool Solver::edgeFill(Nonogram *puzzle)
+{
+  log("edge fill");
+  bool resolved = false;
+  for (size_t i = 0; i < puzzle->columns.size(); i++) {
+    int index = 0;
+    int inset = 0;
+    int inClue = false;
+    for (size_t j = 0; j < puzzle->rows.size(); j++) {
+      if ((*solution)[i][j] == 0 && inClue){
+        index++;
+        inClue = false;
+      } else if((*solution)[i][j] == 1 && !inClue){
+        inClue = true;
+        inset = j;
+      }
+      else if ((*solution)[i][j] == 2 && inClue) {
+        for(int n = 0; n < puzzle->columns[i][index]; n++) {
+          if ((*solution)[i][inset+n] == 2) {
+            resolved = true;
+            (*solution)[i][inset+n] = 1;
+            updateSolvePreview(i, inset+n, 1);
+          }
+        }
+        if (
+          inset+puzzle->columns[i][index] < puzzle->rows.size() &&
+          (*solution)[i][inset+puzzle->columns[i][index]] == 2
+        ) {
+          resolved = true;
+          (*solution)[i][inset+puzzle->columns[i][index]] = 0;
+          updateSolvePreview(i, inset+puzzle->columns[i][index], 0);
+        }
+        break;
+      } else if ((*solution)[i][j] == 2) break;
+    }
+    index = puzzle->columns[i].size()-1;
+    inset = puzzle->rows.size()-1;
+    inClue = false;
+    for (size_t j = puzzle->rows.size()-1; j > 0; j--) {
+      if ((*solution)[i][j] == 0 && inClue){
+        index--;
+        inClue = false;
+      } else if ((*solution)[i][j] == 1 && !inClue) {
+        inClue = true;
+        inset = j;
+      }
+      else if ((*solution)[i][j] == 2 && inClue) {
+        for(int n = 0; n < puzzle->columns[i][index]; n++) {
+          if ((*solution)[i][inset-n] == 2) {
+            resolved = true;
+            (*solution)[i][inset-n] = 1;
+            updateSolvePreview(i, inset-n, 1);
+          }
+        }
+        if (
+          inset+puzzle->columns[i][index] > 0 &&
+          (*solution)[i][inset-puzzle->columns[i][index]] == 2
+        ) {
+          resolved = true;
+          (*solution)[i][inset-puzzle->columns[i][index]] = 0;
+          updateSolvePreview(i, inset-puzzle->columns[i][index], 0);
+        }
+        break;
+      } else if ((*solution)[i][j] == 2) break;
+    }
+  }
+  for (size_t j = 0; j < puzzle->rows.size(); j++) {
+    int index = 0;
+    int inset = 0;
+    int inClue = false;
+    for (size_t i = 0; i < puzzle->columns.size(); i++) {
+      if ((*solution)[i][j] == 0 && inClue){
+        index++;
+        inClue = false;
+      } else if((*solution)[i][j] == 1 && !inClue){
+        inClue = true;
+        inset = i;
+      }
+      else if ((*solution)[i][j] == 2 && inClue) {
+        for(int n = 0; n < puzzle->rows[j][index]; n++) {
+          if ((*solution)[inset+n][j] == 2) {
+            resolved = true;
+            (*solution)[inset+n][j] = 1;
+            updateSolvePreview(inset+n, j, 1);
+          }
+        }
+        if (
+          inset+puzzle->rows[j][index] < puzzle->columns.size() &&
+          (*solution)[inset+puzzle->rows[j][index]][j] == 2
+        ) {
+          resolved = true;
+          (*solution)[inset+puzzle->rows[j][index]][j] = 0;
+          updateSolvePreview(inset+puzzle->rows[j][index], j, 0);
+        }
+        break;
+      } else if ((*solution)[i][j] == 2) break;
+    }
+    index = puzzle->rows[j].size()-1;
+    inset = puzzle->columns.size()-1;
+    inClue = false;
+    for (size_t i = puzzle->columns.size()-1; i > 0; i--) {
+      if ((*solution)[i][j] == 0 && inClue){
+        index--;
+        inClue = false;
+      } else if((*solution)[i][j] == 1 && !inClue){
+        inClue = true;
+        inset = i;
+      }
+      else if ((*solution)[i][j] == 2 && inClue) {
+        for(int n = 0; n < puzzle->rows[j][index]; n++) {
+          if ((*solution)[inset-n][j] == 2) {
+            resolved = true;
+            (*solution)[inset-n][j] = 1;
+            updateSolvePreview(inset-n, j, 1);
+          }
+        }
+        if (
+          inset-puzzle->rows[j][index] > 0 &&
+          (*solution)[inset-puzzle->rows[j][index]][j] == 2
+        ) {
+          resolved = true;
+          (*solution)[inset-puzzle->rows[j][index]][j] = 0;
+          updateSolvePreview(inset-puzzle->rows[j][index], j, 0);
+        }
+        break;
+      } else if ((*solution)[i][j] == 2) break;
+    }
+  }
+  return resolved;
 }
 
 int Solver::getEdgeClueIndex(bool isColumn, int rowIndex, int dir)
@@ -1074,7 +1190,7 @@ bool Solver::appendRow(
   if (pendingNums.size() <= 0){
     while (init.size() < (isColumn ? (*solution)[0].size() : (*solution).size()))
       init.push_back(0);
-    if(rowIndex > 0 && rowIndex < (!isColumn ? (*solution)[0].size()-1 : (*solution).size()-1)) {
+    if(multiLine == true && rowIndex > 0 && rowIndex < (!isColumn ? (*solution)[0].size()-1 : (*solution).size()-1)) {
       if (!isColumn) {
         if (
           rowIndex == getBound(SOLVER_BOUND_TOP) &&
@@ -1117,8 +1233,9 @@ bool Solver::appendRow(
       if (checkConflict(isColumn, rowIndex, i, init[i])){
         return false;
       }
-      if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]))
-        return false;
+      if (multiLine)
+        if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]))
+          return false;
       if (init[i] != lastCombo[i] && lastCombo[i] != 3) lastCombo[i] = 2;
       else {
         lastCombo[i] = init[i];
@@ -1292,6 +1409,8 @@ Texture *Solver::generateBitmap(std::vector<std::vector<int>> *solution)
 
 void Solver::render()
 {
+  auto&& scopedLock = std::lock_guard< std::mutex >(renderMutex);
+  (void)scopedLock;
   progress->render(0, 0);
   SDL_RenderPresent(renderer);
 }
