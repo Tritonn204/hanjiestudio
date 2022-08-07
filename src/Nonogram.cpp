@@ -119,13 +119,8 @@ void Nonogram::savePuzzle()
   }
 }
 
-int Nonogram::testPrint()
+int Nonogram::newPDF()
 {
-  HPDF_Doc pdf;
-  HPDF_Font font;
-  HPDF_Font titleFont;
-  HPDF_Page page;
-
   pdf = HPDF_New (error_handler, NULL);
   if (!pdf) {
       printf ("ERROR: cannot create pdf object.\n");
@@ -138,10 +133,32 @@ int Nonogram::testPrint()
   }
 
   const char *fontFile = HPDF_LoadTTFontFromFile (pdf, "res/pdfhints.ttf", HPDF_TRUE);
-  font = HPDF_GetFont (pdf, fontFile, NULL);
+  pdf_font = HPDF_GetFont (pdf, fontFile, NULL);
   fontFile = HPDF_LoadTTFontFromFile (pdf, "res/titlefont.ttf", HPDF_TRUE);
-  titleFont = HPDF_GetFont (pdf, fontFile, NULL);
+  pdf_titleFont = HPDF_GetFont (pdf, fontFile, NULL);
+}
 
+void Nonogram::exportBookPDF(const char* pdfPath)
+{
+  /* save the document to a file */
+  HPDF_SaveToFile (pdf, pdfPath);
+  /* clean up */
+  HPDF_Free (pdf);
+}
+
+void Nonogram::addBlankPage(int amount)
+{
+  for(int i = 0; i < amount; i++){
+    HPDF_Page page;
+    page = HPDF_AddPage (pdf);
+    HPDF_Page_SetWidth (page, reg_width);
+    HPDF_Page_SetHeight (page, reg_height);
+  }
+}
+
+int Nonogram::appendToPDF()
+{
+  HPDF_Page page;
   page = HPDF_AddPage (pdf);
 
   HPDF_Page_SetWidth (page, reg_width);
@@ -178,7 +195,7 @@ int Nonogram::testPrint()
   // HPDF_Page_SetShading(this->Impl->Page, shading);
 
   HPDF_Page_SetRGBFill (page, 0.2, 0.2, 0.2);
-  HPDF_Page_SetFontAndSize (page, titleFont, titleSize);
+  HPDF_Page_SetFontAndSize (page, pdf_titleFont, titleSize);
 
   {
     int tw = HPDF_Page_TextWidth (page, name);
@@ -186,9 +203,25 @@ int Nonogram::testPrint()
     HPDF_Page_MoveTextPos (
       page,
       pW/2 - tw/2,
-      vertPos+puzzleHeight+30
+      vertPos+puzzleHeight+30+dimSize+10
     );
     HPDF_Page_ShowText (page, name);
+    HPDF_Page_EndText (page);
+
+    HPDF_Page_SetFontAndSize (page, pdf_titleFont, dimSize);
+
+    std::string dimensions = std::to_string(cells.size());
+    dimensions += " x ";
+    dimensions += std::to_string(cells[0].size());
+
+    tw = HPDF_Page_TextWidth (page, dimensions.c_str());
+    HPDF_Page_BeginText (page);
+    HPDF_Page_MoveTextPos (
+      page,
+      pW/2 - tw/2,
+      vertPos+puzzleHeight+30
+    );
+    HPDF_Page_ShowText (page, dimensions.c_str());
     HPDF_Page_EndText (page);
   }
 
@@ -209,7 +242,181 @@ int Nonogram::testPrint()
   }
 
   HPDF_Page_SetRGBFill (page, 0.2, 0.2, 0.2);
-  HPDF_Page_SetFontAndSize (page, font, hintSize);
+  HPDF_Page_SetFontAndSize (page, pdf_font, hintSize);
+  {
+    HPDF_Page_SetLineWidth (page, lightLine);
+    HPDF_Page_SetRGBStroke (page, 0.8, 0.8, 0.8);
+    for(size_t i = 0; i <= columns.size(); i++) {
+      int XPOS = offset+gridSize*i;
+      if (i % 5 != 0) {
+        HPDF_Page_MoveTo (page, XPOS, vertOffset);
+        HPDF_Page_LineTo (page, XPOS, vertOffset+puzzleHeight + hintSize/4);
+        HPDF_Page_Stroke (page);
+      }
+    }
+
+    //write column hints
+    for(size_t i = 0; i < columns.size(); i++) {
+      int XPOS = offset+gridSize*i;
+      for(size_t j = 0; j < columns[i].size(); j++) {
+        int tw = HPDF_Page_TextWidth (page, const_cast<char*>((std::to_string(columns[i][columns[i].size()-j-1])).c_str()));
+        HPDF_Page_BeginText (page);
+        HPDF_Page_MoveTextPos (
+          page, XPOS + (gridSize - tw)/2,
+          vertOffset+rows.size()*gridSize + (j)*gridSize + (gridSize-hintSize) + hintSize/4
+        );
+        HPDF_Page_ShowText (page, const_cast<char*>((std::to_string(columns[i][columns[i].size()-j-1])).c_str()));
+        HPDF_Page_EndText (page);
+      }
+    }
+
+    for(size_t i = 0; i <= rows.size(); i++) {
+      if (i % 5 != 0) {
+        HPDF_Page_MoveTo (page, xInset, vertPos+gridSize*(rows.size()-i));
+        HPDF_Page_LineTo (page, xInset+puzzleWidth, vertPos+gridSize*(rows.size()-i));
+        HPDF_Page_Stroke (page);
+      }
+    }
+
+
+    //write row hints
+    for(size_t i = 0; i < rows.size(); i++) {
+      int YPOS = vertPos+gridSize*i;
+      tRow hintRow = rows[rows.size()-i-1];
+      for(size_t j = 0; j < hintRow.size(); j++) {
+        int tw = HPDF_Page_TextWidth (page, const_cast<char*>((std::to_string(hintRow[hintRow.size()-j-1])).c_str()));
+        HPDF_Page_BeginText (page);
+        HPDF_Page_MoveTextPos (
+          page,
+          offset-gridSize*((j+1)) - tw/2 + gridSize/3,
+          YPOS + (gridSize-hintSize)
+        );
+        HPDF_Page_ShowText (page, const_cast<char*>((std::to_string(hintRow[hintRow.size()-j-1])).c_str()));
+        HPDF_Page_EndText (page);
+      }
+    }
+
+    HPDF_Page_SetLineWidth (page, lineWidth);
+    HPDF_Page_SetRGBStroke (page, 0.5, 0.5, 0.5);
+    for(size_t i = 0; i <= columns.size(); i++) {
+      if (i % 5 == 0) {
+        HPDF_Page_MoveTo (page, offset+gridSize*i, vertOffset);
+        HPDF_Page_LineTo (page, offset+gridSize*i, vertOffset+puzzleHeight + hintSize/4);
+        HPDF_Page_Stroke (page);
+      }
+    }
+    for(size_t i = 0; i <= rows.size(); i++) {
+      if (i % 5 == 0) {
+        HPDF_Page_MoveTo (page, xInset, vertPos+gridSize*(rows.size()-i));
+        HPDF_Page_LineTo (page, xInset+puzzleWidth, vertPos+gridSize*(rows.size()-i));
+        HPDF_Page_Stroke (page);
+      }
+    }
+  }
+
+  //puzzle border
+  HPDF_Page_SetLineWidth (page, boldLine);
+  HPDF_Page_SetRGBStroke (page, 0.5, 0.5, 0.5);
+  {
+    HPDF_Page_MoveTo (page, offset, vertPos);
+    HPDF_Page_LineTo (page, xInset+puzzleWidth, vertPos);
+    HPDF_Page_LineTo (page, xInset+puzzleWidth, vertOffset+rows.size()*gridSize);
+    HPDF_Page_LineTo (page, offset, vertOffset+rows.size()*gridSize);
+    HPDF_Page_LineTo (page, offset, vertPos);
+    HPDF_Page_Stroke (page);
+  }
+  return 0;
+}
+
+int Nonogram::printToPDF(const char* pdfPath)
+{
+  HPDF_Free (pdf);
+  pdf = HPDF_New (error_handler, NULL);
+  HPDF_Page page;
+  page = HPDF_AddPage (pdf);
+
+  HPDF_Page_SetWidth (page, reg_width);
+  HPDF_Page_SetHeight (page, reg_height);
+
+  int pW = HPDF_Page_GetWidth (page);
+  int pH = HPDF_Page_GetHeight (page);
+
+  HPDF_Page_SetLineWidth (page, 10);
+
+  int gridSize = (double)(pW - (margin*2))/(double)(columns.size()+viewer->largestRow);
+  gridSize = std::min(gridSize,(int)(pH*0.66)/(int)(rows.size()+viewer->largestCol));
+  gridSize = std::min(gridSize, 23);
+
+  int puzzleWidth = (columns.size() + viewer->largestRow) * gridSize;
+  int puzzleHeight = (rows.size() + viewer->largestCol) * gridSize;
+
+  int xInset = (pW-puzzleWidth)/2;
+  int offset = xInset + gridSize*(viewer->largestRow);
+
+  int vertOffset = (pH-puzzleHeight)/2;
+  int vertPos = vertOffset;
+
+  int hintSize = gridSize*0.9;
+
+  // HPDF_Shading shading = HPDF_Shading_New(pdf,
+  //     HPDF_SHADING_FREE_FORM_TRIANGLE_MESH, HPDF_CS_DEVICE_RGB, bbox[0], bbox[1], bbox[2], bbox[3]);
+  // HPDF_Shading_AddVertexRGB(shading, HPDF_FREE_FORM_TRI_MESH_EDGEFLAG_NO_CONNECTION, 0, 0,
+  //     0, 0, 0);
+  // HPDF_Shading_AddVertexRGB(shading, HPDF_FREE_FORM_TRI_MESH_EDGEFLAG_NO_CONNECTION, 100, 0,
+  //     0, 0, 0);
+  // HPDF_Shading_AddVertexRGB(shading, HPDF_FREE_FORM_TRI_MESH_EDGEFLAG_NO_CONNECTION, 50, 75,
+  //     1, 1, 1);
+  // HPDF_Page_SetShading(this->Impl->Page, shading);
+
+  HPDF_Page_SetRGBFill (page, 0.2, 0.2, 0.2);
+  HPDF_Page_SetFontAndSize (page, pdf_titleFont, titleSize);
+
+  {
+    int tw = HPDF_Page_TextWidth (page, name);
+    HPDF_Page_BeginText (page);
+    HPDF_Page_MoveTextPos (
+      page,
+      pW/2 - tw/2,
+      vertPos+puzzleHeight+30+dimSize+10
+    );
+    HPDF_Page_ShowText (page, name);
+    HPDF_Page_EndText (page);
+
+    HPDF_Page_SetFontAndSize (page, pdf_titleFont, dimSize);
+
+    std::string dimensions = std::to_string(cells.size());
+    dimensions += " x ";
+    dimensions += std::to_string(cells[0].size());
+
+    tw = HPDF_Page_TextWidth (page, dimensions.c_str());
+    HPDF_Page_BeginText (page);
+    HPDF_Page_MoveTextPos (
+      page,
+      pW/2 - tw/2,
+      vertPos+puzzleHeight+30
+    );
+    HPDF_Page_ShowText (page, dimensions.c_str());
+    HPDF_Page_EndText (page);
+  }
+
+  HPDF_Page_SetRGBFill (page, 0.95, 0.95, 0.95);
+  for(size_t i = 0; i < columns.size(); i++) {
+    int XPOS = offset+gridSize*i;
+    if (i % 2 == 1) {
+      HPDF_Page_Rectangle (page, XPOS, vertPos+rows.size()*gridSize, gridSize, viewer->largestCol*gridSize + hintSize/4);
+      HPDF_Page_Fill (page);
+    }
+  }
+  for(size_t i = 0; i < rows.size(); i++) {
+    int YPOS = vertPos+gridSize*i;
+    if (i % 2 == 1) {
+      HPDF_Page_Rectangle (page, offset, YPOS, -gridSize*viewer->largestRow, gridSize);
+      HPDF_Page_Fill (page);
+    }
+  }
+
+  HPDF_Page_SetRGBFill (page, 0.2, 0.2, 0.2);
+  HPDF_Page_SetFontAndSize (page, pdf_font, hintSize);
   {
     HPDF_Page_SetLineWidth (page, lightLine);
     HPDF_Page_SetRGBStroke (page, 0.8, 0.8, 0.8);
@@ -295,7 +502,7 @@ int Nonogram::testPrint()
 
 
   /* save the document to a file */
-  HPDF_SaveToFile (pdf, "testpdf.pdf");
+  HPDF_SaveToFile (pdf, pdfPath);
 
   /* clean up */
   HPDF_Free (pdf);
@@ -619,6 +826,19 @@ void Nonogram::init(const char* title, int sizeX, int sizeY)
   //solvePuzzle();
 }
 
+void Nonogram::resize(int w, int h)
+{
+  cells.clear();
+  rows.clear();
+  columns.clear();
+  //Initialize puzzle cells
+  cells = std::vector<std::vector<int>>(w, std::vector<int> (h, 0));
+
+  //Initialize hint rows and columns
+  rows = std::vector<std::vector<int>>(h, std::vector<int> (1, 0));
+  columns = std::vector<std::vector<int>>(w, std::vector<int> (1, 0));
+}
+
 void Nonogram::randomize(int fillBias, int gapBias)
 {
   for(size_t i = 0; i < cells.size(); i++) {
@@ -670,6 +890,21 @@ void Nonogram::randomize(int fillBias, int gapBias)
   Nonogram::refresh();
 }
 
+void Nonogram::genFittedDimensions(int min, int max, int *w, int *h, bool landscape)
+{
+  int pW = (rand()%(max-min))+min;
+  int pH = (rand()%(max-min))+min;
+
+  int smaller = landscape ? pH : pW;
+  int bigger = landscape ? pW : pH;
+  if (bigger < smaller*0.66) genFittedDimensions(min,max,w,h,landscape);
+  else if (bigger > smaller*2) genFittedDimensions(min,max,w,h,landscape);
+  else {
+    *w = pW;
+    *h = pH;
+  }
+}
+
 int Nonogram::getWidth()
 {
   return
@@ -690,7 +925,7 @@ void Nonogram::setPosition(int x, int y)
   Y = y;
 }
 
-void Nonogram::solvePuzzle()
+bool Nonogram::solvePuzzle()
 {
   //Initialize solver class
   solver->~Solver();
@@ -698,14 +933,17 @@ void Nonogram::solvePuzzle()
   solver->init(renderer);
   paused = true;
   std::vector<std::vector<int>> valid = solver->solve(this,viewer->cellSize);
-  if(valid.empty())
+  if(valid.empty()){
     log("Puzzle is solvable!");
+    return true;
+  }
   else {
     log("Puzzle is impossible to solve with logic alone... try altering.");
     //saveProgress(&valid);
   }
-  SDL_Delay(5000);
+  //SDL_Delay(5000);
   paused = false;
+  return false;
 }
 
 void Nonogram::render()

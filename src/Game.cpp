@@ -201,8 +201,12 @@ void Game::handleEvents()
           space = true;
           break;
           case SDLK_RIGHT:
-          nonogram->init("Random", (rand()%45)+5, (rand()%45)+5);
-          nonogram->fitToView();
+          {
+            int pW, pH;
+            nonogram->genFittedDimensions(5, 50, &pW, &pH);
+            nonogram->init("Random", pW, pH);
+            nonogram->fitToView();
+          }
           break;
           case SDLK_LEFT:
 
@@ -214,8 +218,27 @@ void Game::handleEvents()
             //SDL_Thread* solveThread = SDL_CreateThread(solvePuzzle, "Solver", data);
             //SDL_DetachThread(solveThread);
             //nonogram->savePuzzleTxt();
-            nonogram->solvePuzzle();
+            //nonogram->solvePuzzle();
             //nonogram->testPrint();
+            nonogram->newPDF();
+            int pW, pH;
+            int puzzleCount = 0;
+            while(puzzleCount < 8) {
+              nonogram->addBlankPage();
+              std::string puzzleTitle= "Puzzle ";
+              puzzleTitle += std::to_string((puzzleCount+1));
+              nonogram->genFittedDimensions(5, 25, &pW, &pH);
+              nonogram->resize(pW, pH);
+              nonogram->rename(puzzleTitle.c_str());
+              nonogram->fitToView();
+              nonogram->randomize();
+              if (nonogram->solvePuzzle()){
+                nonogram->appendToPDF();
+                ++puzzleCount;
+              }
+              SDL_Delay(5);
+            }
+            nonogram->exportBookPDF("testbook.pdf");
             break;
           }
           case SDLK_UP:

@@ -3,6 +3,7 @@
 #include <string>
 #include <SDL2/SDL.h>
 #include <thread>
+#include <openmp.h>
 
 #include "Nonogram.hpp"
 #include "Solver.hpp"
@@ -115,12 +116,12 @@ int Solver::getBound(int edge)
 
 std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
 {
-  const auto processor_count = std::thread::hardware_concurrency();
-  int threadCount = processor_count;
-  if (threadCount == 0) threadCount = 1;
-  ctpl::thread_pool lineQueue(threadCount);
-
-  std::cout << threadCount << " threads" << std::endl;
+  // const auto processor_count = std::thread::hardware_concurrency();
+  // int threadCount = processor_count;
+  // if (threadCount == 0) threadCount = 1;
+  // ctpl::thread_pool lineQueue(threadCount);
+  //
+  // std::cout << threadCount << " threads" << std::endl;
 
   scale = S;
   solution = new std::vector<std::vector<int>>(puzzle->cells.size(), std::vector<int>(puzzle->cells[0].size(), 2));

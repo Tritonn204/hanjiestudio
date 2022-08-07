@@ -3,6 +3,7 @@
 
 int margin = 40;
 int titleSize = 40;
+int dimSize = 24;
 
 double lightLine = 0.2;
 double lineWidth = 0.45;

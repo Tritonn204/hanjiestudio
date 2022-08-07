@@ -11,6 +11,8 @@
 #include "Viewer.hpp"
 #include "Solver.hpp"
 
+#include "hpdf.h"
+
 class Nonogram {
 public:
   const char* name;
@@ -53,7 +55,11 @@ public:
   void scaledMousePos(int *qX, int *qY);
   void cellPos(int *qX, int *qY);
 
-  int testPrint();
+  int newPDF();
+  void exportBookPDF(const char* pdfPath);
+  void addBlankPage(int amount = 1);
+  int appendToPDF();
+  int printToPDF(const char* pdfPath);
 
   Texture *generateBitmap();
   Texture *generateBitmap(std::vector<std::vector<int>> *progress);
@@ -61,6 +67,8 @@ public:
   void saveProgress(std::vector<std::vector<int>> *progress);
   void savePuzzleTxt();
   void loadPuzzle();
+  void rename(const char* newName) {name = newName;}
+  void resize(int w, int h);
 
   int getCellSize() {return viewer->cellSize;}
   int getLargestRow() {return viewer->largestRow;}
@@ -79,6 +87,7 @@ public:
 
   int getWidth();
   int getHeight();
+  void genFittedDimensions(int min, int max, int *w, int *h, bool landscape = false);
 
   void setCell(int xPos, int yPos, int value);
   void setFont(BitmapFont *f) { font = f; }
@@ -89,7 +98,7 @@ public:
   void clearCells();
   void validate();
 
-  void solvePuzzle();
+  bool solvePuzzle();
 
   void exportPuzzle();
 
@@ -108,6 +117,10 @@ private:
 
   int X;
   int Y;
+
+  HPDF_Doc pdf;
+  HPDF_Font pdf_font;
+  HPDF_Font pdf_titleFont;
 
   int currentButton;
 
