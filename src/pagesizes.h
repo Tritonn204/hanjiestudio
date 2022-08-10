@@ -1,7 +1,7 @@
 #ifndef sizes_h
 #define sizes_h
 
-int margin = 64;
+int margin = 56;
 int solutionPadding = 60;
 
 //font sizes

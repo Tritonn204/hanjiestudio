@@ -214,7 +214,7 @@ void Game::handleEvents()
             nonogram->newPDF();
             int pW, pH;
             int puzzleCount = 0;
-            while(puzzleCount < 99) {
+            while(puzzleCount < 64) {
               std::string puzzleTitle= "Puzzle ";
               puzzleTitle += std::to_string((puzzleCount+1));
               nonogram->genFittedDimensions(5, 30, &pW, &pH);

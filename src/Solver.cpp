@@ -116,12 +116,12 @@ int Solver::getBound(int edge)
 
 std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S, bool storeSolution)
 {
-  const auto processor_count = std::thread::hardware_concurrency();
-  int threadCount = processor_count;
-  if (threadCount == 0) threadCount = 2;
-  ctpl::thread_pool lineQueue(threadCount-1);
-
-  std::cout << threadCount << " threads" << std::endl;
+  // const auto processor_count = std::thread::hardware_concurrency();
+  // int threadCount = processor_count;
+  // if (threadCount == 0) threadCount = 2;
+  // ctpl::thread_pool lineQueue(threadCount-1);
+  //
+  // std::cout << threadCount << " threads" << std::endl;
 
   scale = S;
   solution = new std::vector<std::vector<int>>(puzzle->cells.size(), std::vector<int>(puzzle->cells[0].size(), 2));
@@ -155,44 +155,64 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S, bool stor
     rowResults = tRow(puzzle->rows.size(), 2);
     columnResults = tRow(puzzle->columns.size(), 2);
 
-    std::atomic<int> totalIntersects(0);
+    int totalIntersects = 0;
     tRow intersects;
+
+    int doneRows = 0;
+    int doneCols = 0;
 
     tRow fake(1000);
 
-    log("edge solving");
+    #pragma omp parallel
+    {
+      #pragma omp master
+      {
+        log("edge solving");
+        while (true) {
+          SDL_PumpEvents();
+          if (
+            std::find(edgeResults.begin(), edgeResults.end(),2) == edgeResults.end()
+          ) {
+            break;
+          }
+          // SDL_Delay(5);
+        }
+      }
 
-    for (int i = 0; i < 2; i++) {
-      lineQueue.push([&, i](int){
+      #pragma omp for schedule(dynamic) nowait
+      for (int i = 0; i < 2; i++) {
         tRow gen = edgeLogic(puzzle, false, puzzle->rows[rowEdges[i]], rowEdges[i], puzzle->cells.size());
         for(size_t j = 0; j < gen.size(); j++) {
           if (gen[j] != (*solution)[j][rowEdges[i]] && gen[j] < 2) {
-            auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-            (void)scopedLock;
-            (*solution)[j][rowEdges[i]] = gen[j];
-            edgeResults[i] = 1;
-            result = true;
-            updateSolvePreview(j, rowEdges[i], gen[j]);
+            #pragma omp critical
+            {
+              (*solution)[j][rowEdges[i]] = gen[j];
+              edgeResults[i] = 1;
+              result = true;
+              updateSolvePreview(j, rowEdges[i], gen[j]);
+            }
           }
           if ((*solution)[j][rowEdges[i]] == 1) {
             int dir = rowEdges[i] == 0 ? 1 : -1;
             int clue = rowEdges[i] == 0 ? puzzle->columns[j].front() : puzzle->columns[j].back();
             for(int n = 0; n < clue; n++) {
               if ((*solution)[j][rowEdges[i]+(n*dir)] == 2) {
-                auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-                (void)scopedLock;
-                (*solution)[j][rowEdges[i]+(n*dir)] = 1;
-                updateSolvePreview(j, rowEdges[i]+(n*dir), 1);
-                edgeResults[i] = 1;
+                #pragma omp critical
+                {
+                  (*solution)[j][rowEdges[i]+(n*dir)] = 1;
+                  updateSolvePreview(j, rowEdges[i]+(n*dir), 1);
+                  edgeResults[i] = 1;
+                }
               }
             }
             if (rowEdges[i]+((clue)*dir) > 0 && rowEdges[i]+((clue)*dir) < (*solution)[0].size()){
               if ((*solution)[j][rowEdges[i]+((clue)*dir)] == 2) {
-                auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-                (void)scopedLock;
-                (*solution)[j][rowEdges[i]+((clue)*dir)] = 0;
-                updateSolvePreview(j, rowEdges[i]+((clue)*dir), 0);
-                edgeResults[i] = 1;
+                #pragma omp critical
+                {
+                  (*solution)[j][rowEdges[i]+((clue)*dir)] = 0;
+                  updateSolvePreview(j, rowEdges[i]+((clue)*dir), 0);
+                  edgeResults[i] = 1;
+                }
               }
             }
             render();
@@ -200,39 +220,41 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S, bool stor
         }
         if (edgeResults[i] == 2) edgeResults[i] = 0;
         render();
-      });
-    }
+      }
 
-    for (int i = 0; i < 2; i++) {
-      lineQueue.push([&, i](int){
+      #pragma omp for schedule(dynamic)
+      for (int i = 0; i < 2; i++) {
         tRow gen = edgeLogic(puzzle, true, puzzle->columns[colEdges[i]], colEdges[i], puzzle->cells[0].size());
         for(size_t j = 0; j < gen.size(); j++) {
           if (gen[j] != (*solution)[colEdges[i]][j] && gen[j] < 2) {
-            auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-            (void)scopedLock;
-            (*solution)[colEdges[i]][j] = gen[j];
-            edgeResults[i+2] = 1;
-            updateSolvePreview(colEdges[i], j, gen[j]);
-            result = true;
+            #pragma omp critical
+            {
+              (*solution)[colEdges[i]][j] = gen[j];
+              edgeResults[i+2] = 1;
+              updateSolvePreview(colEdges[i], j, gen[j]);
+              result = true;
+            }
           } if ((*solution)[colEdges[i]][j] == 1) {
             int dir = colEdges[i] == 0 ? 1 : -1;
             int clue = colEdges[i] == 0 ? puzzle->rows[j].front() : puzzle->rows[j].back();
             for(int n = 0; n < clue; n++) {
               if ((*solution)[colEdges[i]+(n*dir)][j] == 2) {
-                auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-                (void)scopedLock;
-                (*solution)[colEdges[i]+(n*dir)][j] = 1;
-                updateSolvePreview(colEdges[i]+(n*dir), j, 1);
-                edgeResults[i+2] = 1;
+                #pragma omp critical
+                {
+                  (*solution)[colEdges[i]+(n*dir)][j] = 1;
+                  updateSolvePreview(colEdges[i]+(n*dir), j, 1);
+                  edgeResults[i+2] = 1;
+                }
               }
             }
             if (colEdges[i]+((clue)*dir) > 0 && colEdges[i]+((clue)*dir) < (*solution).size()){
               if ((*solution)[colEdges[i]+((clue)*dir)][j] == 2) {
-                auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-                (void)scopedLock;
-                (*solution)[colEdges[i]+((clue)*dir)][j] = 0;
-                updateSolvePreview(colEdges[i]+((clue)*dir), j, 0);
-                edgeResults[i+2] = 1;
+                #pragma omp critical
+                {
+                  (*solution)[colEdges[i]+((clue)*dir)][j] = 0;
+                  updateSolvePreview(colEdges[i]+((clue)*dir), j, 0);
+                  edgeResults[i+2] = 1;
+                }
               }
             }
             render();
@@ -240,96 +262,87 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S, bool stor
         }
         if (edgeResults[i+2] == 2) edgeResults[i+2] = 0;
         render();
-      });
-    }
-
-    bool isDone = false;
-    while (!isDone) {
-      SDL_PumpEvents();
-      if (
-        std::find(edgeResults.begin(), edgeResults.end(),2) == edgeResults.end()
-      ) {
-        isDone = true;
       }
-      SDL_Delay(5);
-    }
 
-    log("row scan");
+      #pragma omp master
+      {
+        log("row scan");
 
-    totalIntersects = 0;
-    intersects.clear();
-
-    std::atomic<int> doneRows(0);
-
-    for(size_t i = 0; i < puzzle->rows.size(); i++) {
-      lineQueue.push([&,i](int){
-        lineLogic(false, puzzle, &rowResults, &columnResults, i, &intersects);
-        ++doneRows;
-      });
-    }
-
-    isDone = false;
-    while (!isDone) {
-      SDL_PumpEvents();
-      if (doneRows % 5 == 0 || doneRows == puzzle->rows.size()) {
-        totalIntersects += intersects.size();
-        for(size_t j = 0; j < intersects.size(); j++) {
-          lineQueue.push([&,j](int) {
-            lineLogic(true, puzzle, &fake, &fake, intersects[j], &fake);
-            --totalIntersects;
-          });
-        }
+        totalIntersects = 0;
         intersects.clear();
-      }
-      if (
-        std::find(rowResults.begin(), rowResults.end(),2) == rowResults.end() &&
-        totalIntersects <= 0
-      ) {
-        isDone = true;
-      }
-      SDL_Delay(5);
-    }
 
-    totalIntersects = 0;
-    intersects.clear();
-
-    log("column scan");
-
-    std::atomic<int> doneCols(0);
-
-    for(size_t i = 0; i < puzzle->columns.size(); i++) {
-      lineQueue.push([&,i](int){
-        lineLogic(true, puzzle, &rowResults, &columnResults, i, &intersects);
-        ++doneCols;
-      });
-    }
-
-    isDone = false;
-    while (!isDone) {
-      SDL_PumpEvents();
-      log(totalIntersects);
-      if (doneCols % 5 == 0 || doneCols == puzzle->columns.size()) {
-        totalIntersects += intersects.size();
-        for(size_t j = 0; j < intersects.size(); j++) {
-          auto iTask = lineQueue.push([&,j](int) {
-            lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake);
-            --totalIntersects;
-          });
-          try {
-            iTask.get();
-          } catch (std::exception & e) {
-            std::cout << "caught exception\n";
+        while (true) {
+          SDL_PumpEvents();
+          if (doneRows % 5 == 0 || doneRows == puzzle->rows.size()) {
+            #pragma omp critical
+            totalIntersects += intersects.size();
+            for(size_t j = 0; j < intersects.size(); j++) {
+              #pragma omp task
+              {
+                lineLogic(true, puzzle, &fake, &fake, intersects[j], &fake);
+                #pragma omp atomic
+                totalIntersects--;
+              }
+            }
+            #pragma omp critical
+            intersects.clear();
           }
+          if (
+            std::find(rowResults.begin(), rowResults.end(),2) == rowResults.end() &&
+            totalIntersects <= 0
+          ) {
+            break;
+          }
+          // SDL_Delay(5);
         }
+      }
+
+      #pragma omp for schedule(dynamic)
+      for(size_t i = 0; i < puzzle->rows.size(); i++) {
+        lineLogic(false, puzzle, &rowResults, &columnResults, i, &intersects);
+        #pragma omp atomic
+        ++doneRows;
+      }
+
+      #pragma omp master
+      {
+        totalIntersects = 0;
         intersects.clear();
+
+        log("column scan");
+
+        while (true) {
+          SDL_PumpEvents();
+          if (doneCols % 5 == 0 || doneCols == puzzle->columns.size()) {
+            #pragma omp critical
+            totalIntersects += intersects.size();
+            for(size_t j = 0; j < intersects.size(); j++) {
+              #pragma omp task
+              {
+                lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake);
+                #pragma omp atomic
+                totalIntersects--;
+              }
+            }
+            #pragma omp critical
+            intersects.clear();
+          }
+          if (
+            std::find(columnResults.begin(), columnResults.end(),2) == columnResults.end() &&
+            totalIntersects <= 0
+          ) {
+            break;
+          }
+          // SDL_Delay(5);
+        }
       }
-      if (
-        std::find(columnResults.begin(), columnResults.end(),2) == columnResults.end() &&
-        totalIntersects <= 0
-      ) {
-        isDone = true;
+
+      #pragma omp for schedule(dynamic)
+      for(size_t i = 0; i < puzzle->columns.size(); i++) {
+        lineLogic(true, puzzle, &rowResults, &columnResults, i, &intersects);
+        #pragma omp atomic
+        ++doneCols;
       }
-      SDL_Delay(5);
     }
 
     if(
@@ -360,8 +373,6 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S, bool stor
     looper = result;
   }
 
-  lineQueue.stop(true);
-
   printPuzzle(*solution);
   for(size_t i = 0; i < puzzle->cells.size(); i++) {
     for(size_t j = 0; j < puzzle->cells[0].size(); j++) {
@@ -386,34 +397,38 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
     tRow gen = lineSolve(puzzle, false, puzzle->rows[i], i, puzzle->cells.size());
     for(size_t j = 0; j < gen.size(); j++) {
       if (gen[j] != (*solution)[j][i] && gen[j] < 2) {
-        auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-        (void)scopedLock;
-        (*solution)[j][i] = gen[j];
-        (*rowResults)[i] = 1;
-        updateSolvePreview(j, i, gen[j]);
+        #pragma omp critical
+        {
+          (*solution)[j][i] = gen[j];
+          (*rowResults)[i] = 1;
+          updateSolvePreview(j, i, gen[j]);
+        }
         if(!std::count((*intersects).begin(), (*intersects).end(), j)) {
-          auto&& scopedLock = std::lock_guard< std::mutex >(intersectMutex);
-          (void)scopedLock;
-          (*intersects).push_back(j);
+          #pragma omp critical
+          {
+            (*intersects).push_back(j);
+          }
         }
       }
     }
     render();
     if ((*rowResults)[i] == 2) (*rowResults)[i] = 0;
   } else {
-    std::cout << "column " << (i+1) << std::endl;
+    // std::cout << "column " << (i+1) << std::endl;
     tRow gen = lineSolve(puzzle, true, puzzle->columns[i], i, puzzle->cells[0].size());
     for(size_t j = 0; j < gen.size(); j++) {
       if (gen[j] != (*solution)[i][j] && gen[j] < 2) {
-        auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-        (void)scopedLock;
-        (*solution)[i][j] = gen[j];
-        (*colResults)[i] = 1;
-        updateSolvePreview(i, j, gen[j]);
+        #pragma omp critical
+        {
+          (*solution)[i][j] = gen[j];
+          (*colResults)[i] = 1;
+          updateSolvePreview(i, j, gen[j]);
+        }
         if(!std::count((*intersects).begin(), (*intersects).end(), j)) {
-          auto&& scopedLock = std::lock_guard< std::mutex >(intersectMutex);
-          (void)scopedLock;
-          (*intersects).push_back(j);
+          #pragma omp critical
+          {
+            (*intersects).push_back(j);
+          }
         }
       }
     }
@@ -590,11 +605,12 @@ bool Solver::clueScan(Nonogram *puzzle)
     if (fills == puzzle->rows[j]) {
       for(size_t i = 0; i < (*solution).size(); i++) {
         if ((*solution)[i][j] == 2) {
-          auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-          (void)scopedLock;
-          resolved = true;
-          (*solution)[i][j] = 0;
-          updateSolvePreview(i,j,0);
+          #pragma omp critical
+          {
+            resolved = true;
+            (*solution)[i][j] = 0;
+            updateSolvePreview(i,j,0);
+          }
         }
       }
     }
@@ -607,11 +623,12 @@ bool Solver::clueScan(Nonogram *puzzle)
     if (fills == puzzle->columns[j]) {
       for(size_t i = 0; i < (*solution)[0].size(); i++) {
         if ((*solution)[j][i] == 2) {
-          auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-          (void)scopedLock;
-          resolved = true;
-          (*solution)[j][i] = 0;
-          updateSolvePreview(j,i,0);
+          #pragma omp critical
+          {
+            resolved = true;
+            (*solution)[j][i] = 0;
+            updateSolvePreview(j,i,0);
+          }
         }
       }
     }
@@ -624,8 +641,6 @@ bool Solver::clueScan(Nonogram *puzzle)
 void Solver::updateSolvePreview(int x, int y, int val)
 {
   // std::cout << (val==3) << std::endl;
-  auto&& scopedLock = std::lock_guard< std::mutex >(renderMutex);
-  (void)scopedLock;
   const char* oldHint = SDL_GetHint(SDL_HINT_RENDER_SCALE_QUALITY);
   progress->setAsRenderTarget();
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
@@ -1426,10 +1441,11 @@ Texture *Solver::generateBitmap(std::vector<std::vector<int>> *solution)
 
 void Solver::render()
 {
-  auto&& scopedLock = std::lock_guard< std::mutex >(renderMutex);
-  (void)scopedLock;
-  progress->render(0, 0);
-  SDL_RenderPresent(renderer);
+  #pragma omp critical
+  {
+    progress->render(0, 0);
+    SDL_RenderPresent(renderer);
+  }
 }
 
 tRow Solver::lineSolve(Nonogram *puzzle, bool isColumn, const std::vector<int> row, int rowIndex, unsigned int rowSize) {
