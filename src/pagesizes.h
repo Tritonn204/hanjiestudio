@@ -1,9 +1,15 @@
 #ifndef sizes_h
 #define sizes_h
 
-int margin = 40;
+int margin = 64;
+int solutionPadding = 60;
+
+//font sizes
 int titleSize = 40;
 int dimSize = 24;
+int solutionTitleSize = 10;
+
+int pdf_maxCellSize = 18;
 
 double lightLine = 0.2;
 double lineWidth = 0.45;

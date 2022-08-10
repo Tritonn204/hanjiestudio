@@ -20,8 +20,8 @@ public:
   int width;
   int height;
 
-  bool isValid;
-  bool paused;
+  bool isValid = false;
+  bool paused = false;
 
   std::vector<bool> toggles = std::vector<bool>(50,false);
 
@@ -29,6 +29,7 @@ public:
   std::vector<std::vector<int>> rows;
 
   std::vector<std::vector<int>> cells;
+  std::vector<Texture> solutionStack;
 
   Nonogram();
   ~Nonogram();
@@ -59,6 +60,7 @@ public:
   void exportBookPDF(const char* pdfPath);
   void addBlankPage(int amount = 1);
   int appendToPDF();
+  int appendSolutionStack();
   int printToPDF(const char* pdfPath);
 
   Texture *generateBitmap();
@@ -98,7 +100,7 @@ public:
   void clearCells();
   void validate();
 
-  bool solvePuzzle();
+  bool solvePuzzle(bool storeSolution);
 
   void exportPuzzle();
 

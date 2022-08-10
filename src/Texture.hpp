@@ -23,7 +23,7 @@ public:
   bool unlockTexture();
   void* getPixels();
   void copyPixels( void* pixels );
-  void saveToBMP(const char *filename);
+  void saveToPNG(const char *filename);
   int getPitch();
   void scale(float s) {mScale = s;}
   Uint32 getPixel32( unsigned int x, unsigned int y );

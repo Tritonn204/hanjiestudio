@@ -23,6 +23,7 @@ public:
   ~Solver();
 
   std::vector<std::vector<int>> *solution;
+  int saverIndex = 0;
 
   Texture *progress;
 
@@ -36,14 +37,14 @@ public:
 
   int requiredCells(const std::vector<int> nums);
 
-  std::vector<std::vector<int>> solve(Nonogram *puzzle, float scale);
+  std::vector<std::vector<int>> solve(Nonogram *puzzle, float scale, bool storeSolution);
   bool solveRow(Nonogram *puzzle, std::vector<tRow> *valid, int row, int size);
   bool solveColumn(Nonogram *puzzle, std::vector<tRow> *valid, int column, int size);
   void trimValidity( std::vector<std::vector<int>> *cells, std::vector<std::vector<tRow>> *validRows, std::vector<std::vector<tRow>> *validCols);
 
   bool appendRow(
     Nonogram *puzzle, bool isColumn, tRow init, const std::vector<int> pendingNums,
-    unsigned int rowSize, int rowIndex, tRow &lastCombo, ctpl::thread_pool *lineQueue
+    unsigned int rowSize, int rowIndex, tRow &lastCombo
   );
   bool appendRowEdge(Nonogram *puzzle, bool isColumn, tRow init, const std::vector<int> pendingNums, unsigned int rowSize, int rowIndex, tRow &lastCombo);
 
@@ -63,14 +64,14 @@ public:
   void updateSolvePreview(int x, int y, int val);
 
   tRow edgeLogic(Nonogram *puzzle, bool isColumn, const std::vector<int> row, int rowIndex, unsigned int rowSize);
-  tRow lineSolve(Nonogram *puzzle, bool isColumn, const std::vector<int> row, int rowIndex, unsigned int rowSize, ctpl::thread_pool *lineQueue);
+  tRow lineSolve(Nonogram *puzzle, bool isColumn, const std::vector<int> row, int rowIndex, unsigned int rowSize);
   tRow getClues(bool isColumn, int rowIndex);
   tRow calcClues(tRow row);
   tRow calcSafeClues(tRow row);
   std::vector<tRow> calcSafeRuns(tRow row);
 
 
-  void lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *colResults, int i, tRow *intersects, ctpl::thread_pool *lineQueue);
+  void lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *colResults, int i, tRow *intersects);
 private:
   SDL_Renderer *renderer;
   float scale;

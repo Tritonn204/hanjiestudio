@@ -21,16 +21,6 @@ typedef struct {
   Nonogram *n;
 } SolveData;
 
-int solvePuzzle(void* data)
-{
-  SolveData *tdata = (SolveData*)data;
-  tdata->n->solvePuzzle();
-  free(tdata);
-  return 0;
-}
-
-//sadsa
-
 Game::Game()
 {
 
@@ -209,6 +199,7 @@ void Game::handleEvents()
           }
           break;
           case SDLK_LEFT:
+          nonogram->loadPuzzle();
 
           break;
           case SDLK_DOWN:
@@ -223,24 +214,29 @@ void Game::handleEvents()
             nonogram->newPDF();
             int pW, pH;
             int puzzleCount = 0;
-            while(puzzleCount < 8) {
-              nonogram->addBlankPage();
+            while(puzzleCount < 99) {
               std::string puzzleTitle= "Puzzle ";
               puzzleTitle += std::to_string((puzzleCount+1));
-              nonogram->genFittedDimensions(5, 25, &pW, &pH);
+              nonogram->genFittedDimensions(5, 30, &pW, &pH);
               nonogram->resize(pW, pH);
               nonogram->rename(puzzleTitle.c_str());
               nonogram->fitToView();
               nonogram->randomize();
-              if (nonogram->solvePuzzle()){
+              if (nonogram->solvePuzzle(true)){
+                nonogram->addBlankPage();
                 nonogram->appendToPDF();
                 ++puzzleCount;
               }
               SDL_Delay(5);
             }
+            nonogram->addBlankPage();
+            nonogram->appendSolutionStack();
             nonogram->exportBookPDF("testbook.pdf");
             break;
           }
+          case SDLK_s:
+          nonogram->solvePuzzle(false);
+          break;
           case SDLK_UP:
           nonogram->toggle(VIEWER_HINTS);
           nonogram->fitToView();

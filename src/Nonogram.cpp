@@ -103,14 +103,14 @@ void Nonogram::savePuzzle()
   const char* filename = (std::string(name) + ".hbm").c_str();
   nfdchar_t* savePath;
   // prepare filters for the dialog
-  nfdfilteritem_t filterItem[2] = {{"Hanjie Bitmap", "hbm, bmp"}};
+  nfdfilteritem_t filterItem[2] = {{"Hanjie Bitmap", "hbm, png"}};
 
   // show the dialog
   nfdresult_t result = NFD_SaveDialog(&savePath, filterItem, 1, NULL, filename);
   if (result == NFD_OKAY) {
       puts("Success!");
       puts(savePath);
-      t->saveToBMP(savePath);
+      t->saveToPNG(savePath);
       NFD_FreePath(savePath);
   } else if (result == NFD_CANCEL) {
       puts("User pressed cancel.");
@@ -132,10 +132,14 @@ int Nonogram::newPDF()
       return 1;
   }
 
+  HPDF_SetCompressionMode (pdf, HPDF_COMP_ALL);
+
   const char *fontFile = HPDF_LoadTTFontFromFile (pdf, "res/pdfhints.ttf", HPDF_TRUE);
   pdf_font = HPDF_GetFont (pdf, fontFile, NULL);
   fontFile = HPDF_LoadTTFontFromFile (pdf, "res/titlefont.ttf", HPDF_TRUE);
   pdf_titleFont = HPDF_GetFont (pdf, fontFile, NULL);
+
+  solver->saverIndex += 1;
 }
 
 void Nonogram::exportBookPDF(const char* pdfPath)
@@ -156,6 +160,81 @@ void Nonogram::addBlankPage(int amount)
   }
 }
 
+int Nonogram::appendSolutionStack()
+{
+  HPDF_Page page;
+
+  for(size_t i = 0; i < solver->saverIndex-1; i++) {
+    if (i%6 == 0) {
+      page = HPDF_AddPage (pdf);
+      HPDF_Page_SetWidth (page, reg_width);
+      HPDF_Page_SetHeight (page, reg_height);
+    }
+
+    int pW = HPDF_Page_GetWidth (page);
+    int pH = HPDF_Page_GetHeight (page);
+
+    int boxW = (pH - (margin*2) - solutionPadding*2)/3;
+    int regionW = solutionPadding + boxW*2;
+    int regionH = solutionPadding*2 + boxW*3 - (solutionTitleSize + 16);
+
+    int xInset = (pW - regionW)/2;
+    int yInset = (pH - regionH)/2;
+
+    std::string imgPath = "temp/solution" + std::to_string(i+1);
+    log(imgPath);
+    HPDF_Image img = HPDF_LoadPngImageFromFile (pdf, imgPath.c_str());
+
+    int solW = HPDF_Image_GetWidth (img);
+    int solH = HPDF_Image_GetHeight (img);
+    int imgW, imgH;
+    if (solW > solH) {
+      imgW = boxW;
+      imgH = boxW * solH/solW;
+    } else {
+      imgH = boxW;
+      imgW = boxW * solW/solH;
+    }
+
+    int xPos = xInset + (i%2)*(boxW+solutionPadding) + (boxW-imgW)/2;
+    int yPos = yInset + ((3-floor((i%6)/2))-1)*(boxW+solutionPadding) + (boxW-imgH)/2;
+
+    /* Draw image to the canvas. */
+    HPDF_Page_DrawImage (page, img, xPos, yPos, imgW, imgH);
+    remove(imgPath.c_str());
+
+    //solution border
+    HPDF_Page_SetLineWidth (page, lineWidth);
+    HPDF_Page_SetRGBStroke (page, 0, 0, 0);
+    {
+      HPDF_Page_MoveTo (page, xPos, yPos);
+      HPDF_Page_LineTo (page, xPos+imgW, yPos);
+      HPDF_Page_LineTo (page, xPos+imgW, yPos+imgH);
+      HPDF_Page_LineTo (page, xPos, yPos+imgH);
+      HPDF_Page_LineTo (page, xPos, yPos);
+      HPDF_Page_Stroke (page);
+    }
+    HPDF_Page_SetRGBFill (page, 0, 0, 0);
+    HPDF_Page_SetFontAndSize (page, pdf_titleFont, solutionTitleSize);
+
+    //solution name
+    std::string pName = "Puzzle " + std::to_string(i+1);
+    {
+      HPDF_Page_SetFontAndSize (page, pdf_titleFont, dimSize);
+      int tw = HPDF_Page_TextWidth (page, pName.c_str());
+      HPDF_Page_BeginText (page);
+      HPDF_Page_MoveTextPos (
+        page,
+        xPos + imgW/2 - tw/2,
+        yInset + ((3-floor((i%6)/2))-1)*(boxW+solutionPadding) - solutionTitleSize - 16
+      );
+      HPDF_Page_ShowText (page, pName.c_str());
+      HPDF_Page_EndText (page);
+    }
+  }
+  return 0;
+}
+
 int Nonogram::appendToPDF()
 {
   HPDF_Page page;
@@ -171,7 +250,7 @@ int Nonogram::appendToPDF()
 
   int gridSize = (double)(pW - (margin*2))/(double)(columns.size()+viewer->largestRow);
   gridSize = std::min(gridSize,(int)(pH*0.66)/(int)(rows.size()+viewer->largestCol));
-  gridSize = std::min(gridSize, 23);
+  gridSize = std::min(gridSize, pdf_maxCellSize);
 
   int puzzleWidth = (columns.size() + viewer->largestRow) * gridSize;
   int puzzleHeight = (rows.size() + viewer->largestCol) * gridSize;
@@ -345,7 +424,7 @@ int Nonogram::printToPDF(const char* pdfPath)
 
   int gridSize = (double)(pW - (margin*2))/(double)(columns.size()+viewer->largestRow);
   gridSize = std::min(gridSize,(int)(pH*0.66)/(int)(rows.size()+viewer->largestCol));
-  gridSize = std::min(gridSize, 23);
+  gridSize = std::min(gridSize, pdf_maxCellSize);
 
   int puzzleWidth = (columns.size() + viewer->largestRow) * gridSize;
   int puzzleHeight = (rows.size() + viewer->largestCol) * gridSize;
@@ -522,7 +601,7 @@ void Nonogram::saveProgress(std::vector<std::vector<int>> *progress)
   if (result == NFD_OKAY) {
       puts("Success!");
       puts(savePath);
-      t->saveToBMP(savePath);
+      t->saveToPNG(savePath);
       NFD_FreePath(savePath);
   } else if (result == NFD_CANCEL) {
       puts("User pressed cancel.");
@@ -925,24 +1004,26 @@ void Nonogram::setPosition(int x, int y)
   Y = y;
 }
 
-bool Nonogram::solvePuzzle()
+bool Nonogram::solvePuzzle(bool storeSolution)
 {
   //Initialize solver class
-  solver->~Solver();
-  solver = new Solver();
-  solver->init(renderer);
+  // solver->~Solver();
+  // solver = new Solver();
+  // solver->init(renderer);
   paused = true;
-  std::vector<std::vector<int>> valid = solver->solve(this,viewer->cellSize);
+  std::vector<std::vector<int>> valid = solver->solve(this,viewer->cellSize,storeSolution);
   if(valid.empty()){
     log("Puzzle is solvable!");
+    paused = false;
+    SDL_Delay(5);
     return true;
   }
   else {
-    log("Puzzle is impossible to solve with logic alone... try altering.");
+    log("The computer could not solve the puzzle any further");
     //saveProgress(&valid);
   }
-  //SDL_Delay(5000);
   paused = false;
+  SDL_Delay(5);
   return false;
 }
 

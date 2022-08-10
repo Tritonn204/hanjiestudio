@@ -127,7 +127,7 @@ bool Texture::createBlank( int width, int height, SDL_TextureAccess access )
   return mTexture != NULL;
 }
 
-void Texture::saveToBMP(const char *filename)
+void Texture::saveToPNG(const char *filename)
 {
   SDL_Texture* target = SDL_GetRenderTarget(renderer);
   SDL_SetRenderTarget(renderer, mTexture);

@@ -39,7 +39,7 @@ private:
   std::vector<GUI*> widgets;
 
   int cnt;
-  bool isRunning;
+  bool isRunning = false;
 
   float zoom = 1;
 
@@ -59,11 +59,11 @@ private:
   int mHeight;
 
   //Window focus
-  bool mMouseFocus;
-  bool mKeyboardFocus;
-  bool mFullScreen;
-  bool mMinimized;
-  bool mShown;
+  bool mMouseFocus = false;
+  bool mKeyboardFocus = false;
+  bool mFullScreen = false;
+  bool mMinimized = false;
+  bool mShown = false;
 
   //Key combo flags
   bool ctrl = false;

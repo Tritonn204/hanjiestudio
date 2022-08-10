@@ -3,7 +3,7 @@
 #include <string>
 #include <SDL2/SDL.h>
 #include <thread>
-#include <openmp.h>
+#include <omp.h>
 
 #include "Nonogram.hpp"
 #include "Solver.hpp"
@@ -114,14 +114,14 @@ int Solver::getBound(int edge)
   return 0;
 }
 
-std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
+std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S, bool storeSolution)
 {
-  // const auto processor_count = std::thread::hardware_concurrency();
-  // int threadCount = processor_count;
-  // if (threadCount == 0) threadCount = 1;
-  // ctpl::thread_pool lineQueue(threadCount);
-  //
-  // std::cout << threadCount << " threads" << std::endl;
+  const auto processor_count = std::thread::hardware_concurrency();
+  int threadCount = processor_count;
+  if (threadCount == 0) threadCount = 2;
+  ctpl::thread_pool lineQueue(threadCount-1);
+
+  std::cout << threadCount << " threads" << std::endl;
 
   scale = S;
   solution = new std::vector<std::vector<int>>(puzzle->cells.size(), std::vector<int>(puzzle->cells[0].size(), 2));
@@ -173,8 +173,6 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
             edgeResults[i] = 1;
             result = true;
             updateSolvePreview(j, rowEdges[i], gen[j]);
-          } else {
-            edgeResults[i] = 0;
           }
           if ((*solution)[j][rowEdges[i]] == 1) {
             int dir = rowEdges[i] == 0 ? 1 : -1;
@@ -200,12 +198,10 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
             render();
           }
         }
+        if (edgeResults[i] == 2) edgeResults[i] = 0;
         render();
       });
     }
-
-    intersects.clear();
-    totalIntersects = 0;
 
     for (int i = 0; i < 2; i++) {
       lineQueue.push([&, i](int){
@@ -218,10 +214,7 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
             edgeResults[i+2] = 1;
             updateSolvePreview(colEdges[i], j, gen[j]);
             result = true;
-          } else {
-            edgeResults[i+2] = 0;
-          }
-          if ((*solution)[colEdges[i]][j] == 1) {
+          } if ((*solution)[colEdges[i]][j] == 1) {
             int dir = colEdges[i] == 0 ? 1 : -1;
             int clue = colEdges[i] == 0 ? puzzle->rows[j].front() : puzzle->rows[j].back();
             for(int n = 0; n < clue; n++) {
@@ -245,6 +238,7 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
             render();
           }
         }
+        if (edgeResults[i+2] == 2) edgeResults[i+2] = 0;
         render();
       });
     }
@@ -267,9 +261,9 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
 
     std::atomic<int> doneRows(0);
 
-    for(size_t i = 0; i < puzzle->cells[0].size(); i++) {
+    for(size_t i = 0; i < puzzle->rows.size(); i++) {
       lineQueue.push([&,i](int){
-        lineLogic(false, puzzle, &rowResults, &columnResults, i, &intersects, &lineQueue);
+        lineLogic(false, puzzle, &rowResults, &columnResults, i, &intersects);
         ++doneRows;
       });
     }
@@ -277,11 +271,11 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
     isDone = false;
     while (!isDone) {
       SDL_PumpEvents();
-      if (doneRows % 5 == 0 || doneRows == puzzle->cells[0].size()) {
+      if (doneRows % 5 == 0 || doneRows == puzzle->rows.size()) {
+        totalIntersects += intersects.size();
         for(size_t j = 0; j < intersects.size(); j++) {
-          ++totalIntersects;
           lineQueue.push([&,j](int) {
-            lineLogic(true, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
+            lineLogic(true, puzzle, &fake, &fake, intersects[j], &fake);
             --totalIntersects;
           });
         }
@@ -289,7 +283,7 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
       }
       if (
         std::find(rowResults.begin(), rowResults.end(),2) == rowResults.end() &&
-        totalIntersects == 0
+        totalIntersects <= 0
       ) {
         isDone = true;
       }
@@ -303,9 +297,9 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
 
     std::atomic<int> doneCols(0);
 
-    for(size_t i = 0; i < puzzle->cells.size(); i++) {
+    for(size_t i = 0; i < puzzle->columns.size(); i++) {
       lineQueue.push([&,i](int){
-        lineLogic(true, puzzle, &columnResults, &columnResults, i, &intersects, &lineQueue);
+        lineLogic(true, puzzle, &rowResults, &columnResults, i, &intersects);
         ++doneCols;
       });
     }
@@ -313,19 +307,25 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
     isDone = false;
     while (!isDone) {
       SDL_PumpEvents();
-      if (doneCols % 5 == 0 || doneCols == puzzle->cells.size()) {
+      log(totalIntersects);
+      if (doneCols % 5 == 0 || doneCols == puzzle->columns.size()) {
+        totalIntersects += intersects.size();
         for(size_t j = 0; j < intersects.size(); j++) {
-          ++totalIntersects;
-          lineQueue.push([&,j](int) {
-            lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake, &lineQueue);
+          auto iTask = lineQueue.push([&,j](int) {
+            lineLogic(false, puzzle, &fake, &fake, intersects[j], &fake);
             --totalIntersects;
           });
+          try {
+            iTask.get();
+          } catch (std::exception & e) {
+            std::cout << "caught exception\n";
+          }
         }
         intersects.clear();
       }
       if (
         std::find(columnResults.begin(), columnResults.end(),2) == columnResults.end() &&
-        totalIntersects == 0
+        totalIntersects <= 0
       ) {
         isDone = true;
       }
@@ -344,6 +344,7 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
       fails++;
     }
 
+    log("final steps");
 
     if (!result && clueScan(puzzle))
       result = true;
@@ -358,6 +359,9 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
     }
     looper = result;
   }
+
+  lineQueue.stop(true);
+
   printPuzzle(*solution);
   for(size_t i = 0; i < puzzle->cells.size(); i++) {
     for(size_t j = 0; j < puzzle->cells[0].size(); j++) {
@@ -365,17 +369,21 @@ std::vector<std::vector<int>> Solver::solve(Nonogram *puzzle, float S)
       return *solution;
     }
   }
+  if (storeSolution) {
+    std::string path = "temp/solution" + std::to_string(saverIndex);
+    progress->saveToPNG(path.c_str());
+    ++saverIndex;
+  }
   progress->~Texture();
   return std::vector<std::vector<int>>();
 }
 
-void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *colResults, int i, tRow *intersects, ctpl::thread_pool *lineQueue)
+void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *colResults, int i, tRow *intersects)
 {
   int totalLength = isColumn ? (*solution).size() : (*solution)[0].size();
-  tRow fake(totalLength);
   if (!isColumn) {
     // std::cout << "row " << (i+1) << std::endl;
-    tRow gen = lineSolve(puzzle, false, puzzle->rows[i], i, puzzle->cells.size(), lineQueue);
+    tRow gen = lineSolve(puzzle, false, puzzle->rows[i], i, puzzle->cells.size());
     for(size_t j = 0; j < gen.size(); j++) {
       if (gen[j] != (*solution)[j][i] && gen[j] < 2) {
         auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
@@ -393,14 +401,14 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
     render();
     if ((*rowResults)[i] == 2) (*rowResults)[i] = 0;
   } else {
-    // std::cout << "column " << (i+1) << std::endl;
-    tRow gen = lineSolve(puzzle, true, puzzle->columns[i], i, puzzle->cells[0].size(), lineQueue);
+    std::cout << "column " << (i+1) << std::endl;
+    tRow gen = lineSolve(puzzle, true, puzzle->columns[i], i, puzzle->cells[0].size());
     for(size_t j = 0; j < gen.size(); j++) {
       if (gen[j] != (*solution)[i][j] && gen[j] < 2) {
         auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
         (void)scopedLock;
         (*solution)[i][j] = gen[j];
-        (*rowResults)[i] = 1;
+        (*colResults)[i] = 1;
         updateSolvePreview(i, j, gen[j]);
         if(!std::count((*intersects).begin(), (*intersects).end(), j)) {
           auto&& scopedLock = std::lock_guard< std::mutex >(intersectMutex);
@@ -409,12 +417,8 @@ void Solver::lineLogic(bool isColumn, Nonogram *puzzle, tRow *rowResults, tRow *
         }
       }
     }
-    if ((*rowResults)[i] == 2){
-      auto&& scopedLock = std::lock_guard< std::mutex >(solutionMutex);
-      (void)scopedLock;
-      (*rowResults)[i] = 0;
-    }
     render();
+    if ((*colResults)[i] == 2) (*colResults)[i] = 0;
   }
 }
 
@@ -722,7 +726,10 @@ bool Solver::edgeFill(Nonogram *puzzle)
         inset = j;
       }
       else if ((*solution)[i][j] == 2 && inClue) {
+        if (index >= puzzle->columns[i].size()) break;
+        if (inset+puzzle->columns[i][index]-1 >= puzzle->rows.size()) break;
         for(int n = 0; n < puzzle->columns[i][index]; n++) {
+          if (inset+n >= puzzle->rows.size()) break;
           if ((*solution)[i][inset+n] == 2) {
             resolved = true;
             (*solution)[i][inset+n] = 1;
@@ -752,7 +759,10 @@ bool Solver::edgeFill(Nonogram *puzzle)
         inset = j;
       }
       else if ((*solution)[i][j] == 2 && inClue) {
+        if (index < 0) break;
+        if (inset - (puzzle->columns[i][index]-1) < 0) break;
         for(int n = 0; n < puzzle->columns[i][index]; n++) {
+          if (inset-n < 0) break;
           if ((*solution)[i][inset-n] == 2) {
             resolved = true;
             (*solution)[i][inset-n] = 1;
@@ -760,7 +770,7 @@ bool Solver::edgeFill(Nonogram *puzzle)
           }
         }
         if (
-          inset+puzzle->columns[i][index] > 0 &&
+          inset-puzzle->columns[i][index] > 0 &&
           (*solution)[i][inset-puzzle->columns[i][index]] == 2
         ) {
           resolved = true;
@@ -784,7 +794,10 @@ bool Solver::edgeFill(Nonogram *puzzle)
         inset = i;
       }
       else if ((*solution)[i][j] == 2 && inClue) {
+        if (index >= puzzle->rows[j].size()) break;
+        if (inset+puzzle->rows[j][index]-1 >= puzzle->columns.size()) break;
         for(int n = 0; n < puzzle->rows[j][index]; n++) {
+          if (inset+n >= puzzle->columns.size()) break;
           if ((*solution)[inset+n][j] == 2) {
             resolved = true;
             (*solution)[inset+n][j] = 1;
@@ -814,7 +827,10 @@ bool Solver::edgeFill(Nonogram *puzzle)
         inset = i;
       }
       else if ((*solution)[i][j] == 2 && inClue) {
+        if (index < 0) break;
+        if (inset - (puzzle->rows[j][index]-1) < 0) break;
         for(int n = 0; n < puzzle->rows[j][index]; n++) {
+          if (inset-n < 0) break;
           if ((*solution)[inset-n][j] == 2) {
             resolved = true;
             (*solution)[inset-n][j] = 1;
@@ -1184,7 +1200,7 @@ bool Solver::checkConflictEdge(Nonogram *puzzle, bool isColumn, int rowIndex, tR
 
 bool Solver::appendRow(
   Nonogram *puzzle, bool isColumn, tRow init, const std::vector<int> pendingNums,
-  unsigned int rowSize, int rowIndex, tRow &lastCombo, ctpl::thread_pool *lineQueue
+  unsigned int rowSize, int rowIndex, tRow &lastCombo
 )
 {
   int totalLength = (isColumn ? (*solution)[0].size() : (*solution).size());
@@ -1234,9 +1250,9 @@ bool Solver::appendRow(
       if (checkConflict(isColumn, rowIndex, i, init[i])){
         return false;
       }
-      if (multiLine)
-        if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]))
-          return false;
+      // if (multiLine)
+      //   if (checkConflictCross(puzzle, isColumn, rowIndex, i, init[i]))
+      //     return false;
       if (init[i] != lastCombo[i] && lastCombo[i] != 3) lastCombo[i] = 2;
       else {
         lastCombo[i] = init[i];
@@ -1288,7 +1304,7 @@ bool Solver::appendRow(
       space--;
     }
     if (!conflict)
-      appendRow(puzzle, isColumn, prefix, pNumsAux, space, rowIndex, lastCombo, lineQueue);
+      appendRow(puzzle, isColumn, prefix, pNumsAux, space, rowIndex, lastCombo);
     ++gapSize;
   }
   return true;
@@ -1416,10 +1432,10 @@ void Solver::render()
   SDL_RenderPresent(renderer);
 }
 
-tRow Solver::lineSolve(Nonogram *puzzle, bool isColumn, const std::vector<int> row, int rowIndex, unsigned int rowSize, ctpl::thread_pool *lineQueue) {
+tRow Solver::lineSolve(Nonogram *puzzle, bool isColumn, const std::vector<int> row, int rowIndex, unsigned int rowSize) {
   tRow lastCombo((isColumn ? (*solution)[0].size() : (*solution).size()), 3);
   tRow init;
-  appendRow(puzzle, isColumn, init, row, rowSize, rowIndex, lastCombo, lineQueue);
+  appendRow(puzzle, isColumn, init, row, rowSize, rowIndex, lastCombo);
   // bool done = false;
   // while(!done) {
   //   SDL_PumpEvents();
