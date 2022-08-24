@@ -23,8 +23,11 @@ obj/%.o: src/%.cpp
 cobj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -O3 $(OUTPUT_OPTION) $<
 
+bin/res/%: res/%
+	cp $< $@
+
 clean:
-	-del $(subst /,\,$(cppobjects) $(cobjects) $(deps)) bin\hanjiestudio.exe
+	-del $(subst /,\,$(cppobjects) $(cobjects) $(deps)) bin/hanjiestudio.exe
 
 debug: gdb bin/hanjiestudio.exe
 

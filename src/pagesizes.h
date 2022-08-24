@@ -11,9 +11,10 @@ int solutionTitleSize = 10;
 
 int pdf_maxCellSize = 18;
 
-double lightLine = 0.2;
-double lineWidth = 0.45;
-double boldLine = 0.7;
+double solutionLine = 0.55;
+double lightLine = 0.75;
+double lineWidth = 1;
+double boldLine = 1.66;
 
 int reg_width = 513;
 int reg_height = 738;

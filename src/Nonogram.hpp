@@ -59,6 +59,7 @@ public:
   int newPDF();
   void exportBookPDF(const char* pdfPath);
   void addBlankPage(int amount = 1);
+  void appendInfoPage(const char* imgPath, int imgDpi);
   int appendToPDF();
   int appendSolutionStack();
   int printToPDF(const char* pdfPath);

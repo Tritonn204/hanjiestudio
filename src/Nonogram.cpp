@@ -160,6 +160,36 @@ void Nonogram::addBlankPage(int amount)
   }
 }
 
+void Nonogram::appendInfoPage(const char* imgPath, int imgDpi)
+{
+  HPDF_Page page;
+  page = HPDF_AddPage (pdf);
+  HPDF_Page_SetWidth (page, reg_width);
+  HPDF_Page_SetHeight (page, reg_height);
+
+  int pW = HPDF_Page_GetWidth (page);
+  int pH = HPDF_Page_GetHeight (page);
+
+  HPDF_Image img = HPDF_LoadPngImageFromFile (pdf, imgPath);
+  double scale = 72.0/imgDpi;
+
+  int solW = HPDF_Image_GetWidth (img);
+  int solH = HPDF_Image_GetHeight (img);
+  int imgW, imgH;
+  if (solW > solH) {
+    imgW = scale * solW;
+    imgH = scale * solW * solH/solW;
+  } else {
+    imgH = scale * solH;
+    imgW = scale * solH * solW/solH;
+  }
+
+  int xInset = (pW - imgW)/2;
+  int yInset = (pH - imgH)/2;
+
+  HPDF_Page_DrawImage (page, img, xInset, yInset, imgW, imgH);
+}
+
 int Nonogram::appendSolutionStack()
 {
   HPDF_Page page;
@@ -182,7 +212,7 @@ int Nonogram::appendSolutionStack()
     int yInset = (pH - regionH)/2;
 
     std::string imgPath = "temp/solution" + std::to_string(i+1);
-    log(imgPath);
+    // log(imgPath);
     HPDF_Image img = HPDF_LoadPngImageFromFile (pdf, imgPath.c_str());
 
     int solW = HPDF_Image_GetWidth (img);
@@ -202,6 +232,19 @@ int Nonogram::appendSolutionStack()
     /* Draw image to the canvas. */
     HPDF_Page_DrawImage (page, img, xPos, yPos, imgW, imgH);
     remove(imgPath.c_str());
+
+    HPDF_Page_SetLineWidth (page, solutionLine);
+    HPDF_Page_SetRGBStroke (page, 0.8, 0.8, 0.8);
+    for(size_t i = 0; i <= solW; i++) {
+      HPDF_Page_MoveTo (page, xPos + i*imgW/(double)solW, yPos);
+      HPDF_Page_LineTo (page, xPos + i*imgW/(double)solW, yPos + imgH);
+      HPDF_Page_Stroke (page);
+    }
+    for(size_t i = 0; i <= solH; i++) {
+      HPDF_Page_MoveTo (page, xPos, yPos + i*imgH/(double)solH);
+      HPDF_Page_LineTo (page, xPos + imgW, yPos + i*imgH/(double)solH);
+      HPDF_Page_Stroke (page);
+    }
 
     //solution border
     HPDF_Page_SetLineWidth (page, lineWidth);
@@ -376,7 +419,7 @@ int Nonogram::appendToPDF()
     }
 
     HPDF_Page_SetLineWidth (page, lineWidth);
-    HPDF_Page_SetRGBStroke (page, 0.5, 0.5, 0.5);
+    HPDF_Page_SetRGBStroke (page, 0.6, 0.6, 0.6);
     for(size_t i = 0; i <= columns.size(); i++) {
       if (i % 5 == 0) {
         HPDF_Page_MoveTo (page, offset+gridSize*i, vertOffset);
@@ -550,7 +593,7 @@ int Nonogram::printToPDF(const char* pdfPath)
     }
 
     HPDF_Page_SetLineWidth (page, lineWidth);
-    HPDF_Page_SetRGBStroke (page, 0.5, 0.5, 0.5);
+    HPDF_Page_SetRGBStroke (page, 0.6, 0.6, 0.6);
     for(size_t i = 0; i <= columns.size(); i++) {
       if (i % 5 == 0) {
         HPDF_Page_MoveTo (page, offset+gridSize*i, vertOffset);

@@ -61,7 +61,7 @@ void Game::init(const char *title, int xPos, int yPos, int width, int height, in
       if (renderer)
       {
         GUI *testGui = new GUI();
-        testGui->createContext(renderer, window, "res/tileset.png");
+        testGui->createContext(renderer, window, "res/UI/tileset.png");
         testGui->linkDpi(&dpiScale);
         testGui->init(0,0,400,300, true);
 
@@ -87,7 +87,7 @@ void Game::init(const char *title, int xPos, int yPos, int width, int height, in
         nonogram->createContext(window, renderer, &zoom);
         nonogram->linkMouse(&mouseX, &mouseY);
         nonogram->setFont(font);
-        nonogram->init("Random", 10, 10);
+        nonogram->init("Random", 5, 5);
         nonogram->linkDpi(&dpiScale);
         nonogram->fitToView();
 
@@ -212,9 +212,11 @@ void Game::handleEvents()
             //nonogram->solvePuzzle();
             //nonogram->testPrint();
             nonogram->newPDF();
+            nonogram->appendInfoPage("res/pdf assets/gauntletinfo.png", 300);
+
             int pW, pH;
             int puzzleCount = 0;
-            while(puzzleCount < 64) {
+            while(puzzleCount < 99) {
               std::string puzzleTitle= "Puzzle ";
               puzzleTitle += std::to_string((puzzleCount+1));
               nonogram->genFittedDimensions(5, 30, &pW, &pH);
@@ -227,7 +229,7 @@ void Game::handleEvents()
                 nonogram->appendToPDF();
                 ++puzzleCount;
               }
-              SDL_Delay(5);
+              // SDL_Delay(5);
             }
             nonogram->addBlankPage();
             nonogram->appendSolutionStack();
@@ -236,6 +238,9 @@ void Game::handleEvents()
           }
           case SDLK_s:
           nonogram->solvePuzzle(false);
+          break;
+          case SDLK_w:
+          nonogram->savePuzzle();
           break;
           case SDLK_UP:
           nonogram->toggle(VIEWER_HINTS);
